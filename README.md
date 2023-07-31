@@ -1,2 +1,2 @@
 # OptimisedRecyclingPy
-Python framework for finding economically and environmentally optimised recycling networks for polystyrene construction waste.
+Developing a Python framework for finding economically- and environmentally-optimised recycling networks for polystyrene construction waste. Presented framework is a restructured and reworked version of the optimisation framework developed for the Circular Foam project.
