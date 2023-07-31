@@ -16,8 +16,8 @@ def region_generator(length, n, customers_list):
 
     n (int): number of nodes along each side of the square region []
 
-    customers_list (str): string consisting names of the customerss in the
-    region
+    customers_list (arr): array with node number corresponding to customers in
+    the region
     """
 
     # build x and y vectors representing nodes in the region
