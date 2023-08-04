@@ -18,6 +18,11 @@ def region_generator(length, n, customers_list):
 
     customers_list (arr): array with node number corresponding to customers in
     the region
+
+    Returns
+    -------
+    D (arr): array containing DataFrames representing distances between
+    facilities.
     """
 
     # build x and y vectors representing nodes in the region
@@ -105,3 +110,6 @@ def region_generator(length, n, customers_list):
         columns=n_list,
     )
     D5.to_csv("D5.csv", float_format="%.2f")
+
+    D = [D1, D2, D3, D4, D5]
+    return D
