@@ -1,4 +1,5 @@
 import src.network as network
+import src.optimisation as optimisation
 import random
 import numpy as np
 import pandas as pd
@@ -12,7 +13,7 @@ distances = network.region_generator(100, n, [1, 23])
 # specify product set for the value chain
 products = ["Type1", "Type2", "Briq", "pyrOil", "ANL", "P-TOL"]
 
-# specify product capacity at sources [kilotons]
+# specify product capacity at sources [tons]
 s_list, s_values = [], []
 for idx in range(0, n * n):
     s_list.append("S_" + str(idx))
@@ -24,10 +25,10 @@ for idx in range(0, n * n):
 s_values = np.array(s_values).reshape((n * n, len(products)))
 source_capacity = pd.DataFrame(s_values, columns=products, index=s_list)
 
-# specify demand of the product set [kilotons]
+# specify demand of the product set [tons]
 demand = [0, 0, 0, 0, 8, 6]
 
-# specify market price of the product set [EUR/kiloton]
+# specify market price of the product set [euro/ton]
 market_price = {
     "Type1": 0,
     "Type2": 0,
@@ -65,5 +66,24 @@ yield_factor = {
     ("P-TOL", "DPF"): 0.12,
 }
 
-# specify maximum capacity of the different technologies
-capacity = {"CF": 20, "RTF": 15, "CPF": 35, "DPF": 30}
+# specify maximum facility capacities
+facility_capacity = {"CF": 20, "RTF": 15, "CPF": 35, "DPF": 30}
+
+# initiate ``Infrastructure`` class based on distances from building network
+scenario = optimisation.Infrastructure(
+    distances[0], distances[1], distances[2], distances[3], distances[4]
+)
+
+# pass value chain parameters
+scenario.define_value_chain(
+    products, source_capacity, facility_capacity, demand, yield_factor, market_price
+)
+
+# define the optimisation problem
+scenario.modelValueChain()
+
+# solve the optimisation problem
+scenario.model.optimize()
+
+# print solution
+scenario.getOutput()

@@ -1,0 +1,781 @@
+from pyscipopt import Model, quicksum
+import numpy as np
+import itertools
+
+
+class Infrastructure:
+    """
+    ``Infrastructure class`` defines value-chain-specific parameters and builds
+    up the optimisation problem utilising pyscipopt
+    """
+
+    # define class variables
+    max_load = 20  # maximum load for big roll-off [tons]
+    max_volume = 99  # maximum volume for big roll-off [m^3]
+    max_load_small = 6  # maximum load for small roll-off [tons]
+    max_volume_small = 33  # maximum volume for small roll-off [m^3]
+    fuel_cons = 0.4  # fuel consumption [lt/km]
+    fuel_price = 1.79  # fuel price [euro/lt]
+    toll_cost = 0.198  # toll cost [euro/km]
+    avg_speed = 60  # average driving speed [km/h]
+    driver_wage = 45500  # driver wage [euro/year]
+    driver_hours = 2070  # driver working hours [hours/year]
+    vehicle_cost = 30000 / (15 * 360 * 90 / 14)  # large roll-off [euro/h]
+    vehicle_cost_small = 10000 / (15 * 360 * 90 / 14)  # small roll-off [euro/h]
+    vehicle_cost_tanker = 50000 / (15 * 360 * 90 / 14)  # steel tanker [euro/h]
+    rho_PU = 0.045  # density of polyurethane [ton/m^3]
+    rho_BRIQ = 0.60  # density of briquette [ton/m^3]
+    rho_PO = 0.80  # density of pyrolysis oil [ton/m^3]
+    rho_ANL = 1.00  # density of aniline [ton/m^3]
+    max_time = 1  # maximum transportation between facilities [hours]
+    variable_CF = 15  # operational costs of CF [euro/ton]
+    variable_RTF = 46  # operational cost of RTF [euro/ton]
+    variable_CPF = 500  # operational cost of CPF [euro/ton]
+    variable_DPF = 500  # operational cost of DPF [euro/ton]
+    period = 10  # loan period [years]
+    rate = 0.1
+
+    def __init__(self, D1, D2, D3, D4, D5):
+        """
+        Initialise ``Infrastructure`` object utilising DataFrames for the
+        distance between facilities in the network.
+
+        Parameters
+        ----------
+        D1 (DataFrame): distance matrix for S to CF
+
+        D2 (DataFrame): distance matrix for CF to RTF
+
+        D3 (DataFrame): distance matrix for RTF to CPF
+
+        D4 (DataFrame): distance matrix for CPF to DPF
+
+        D5 (DataFrame): distance matrix for DPF to C
+
+        Notes
+        -----
+        User should be careful in naming facilities. Identical names cannot be
+        used to name different facilities at the same location. For example, a
+        source and collection facility in Cologne should have different names:
+        S_Cologne and CF_Cologne, for example.
+        """
+
+        # initialise instance variables for distance matrices
+        self.D1 = D1
+        self.D2 = D2
+        self.D3 = D3
+        self.D4 = D4
+        self.D5 = D5
+        # initialise instance variables for sources, customers & facilities
+        self.S = D1.index.tolist()
+        self.CF = D1.columns.tolist()
+        self.RTF = D3.index.tolist()
+        self.CPF = D3.columns.tolist()
+        self.DPF = D5.index.tolist()
+        self.C = D5.columns.tolist()
+
+    def define_value_chain(
+        self,
+        products,
+        source_capacity,
+        facility_capacity,
+        demand,
+        yield_factor,
+        market_price,
+    ):
+        """
+        Define the value chain by specifying product- and capacity-specific
+        parameters.
+
+        Parameters
+        ----------
+        products (list): contains names of products in value chain
+
+        source_capacity (DataFrame): contains source capacities [tons]
+
+        facility_capacity (dict): contains facilities as keys and capacities as
+        values [tons]
+
+        demand (list): contains demand of all products [tons]
+
+        yield_factor (dict): contains product and facility type as keys and
+        corresponding yield factors as values
+
+        market_price (dict): contains products as keys and market price as
+        values [euro/ton]
+        """
+
+        # initialise instance variables from provided parameters
+        self.P = products
+        self.PP = products  # P subset used when products transformed @ facility
+        self.source_cap = source_capacity
+        self.yield_factor = yield_factor
+        self.market_price = market_price
+        self.max_cap = facility_capacity
+
+        # generate list with product and customer location pairs
+        key_list_C = []
+        for n in self.C:
+            for p in self.P:
+                key_list_C.append((p, n))
+        self.key_list_C = key_list_C
+        # NOTE: previously done as follows, in case encounter downstream probs
+        # for p in self.P:
+        #    for n in self.C:
+        #        key_list_C.append((p, n))
+
+        # generate instance dict that uses ``self.key_list_C`` as keys and
+        # ``demand`` as values
+        D = {}
+        idx = 0
+        for key in range(0, len(self.key_list_C)):
+            D[self.key_list_C[key]] = demand[idx]
+            idx += 1
+            if idx >= len(demand):
+                idx = 0
+        self.D = D
+
+        # Calculating total capital invesment cost wrt capacity
+        self.tciCF = 1.45 * ((self.max_cap["CF"] / 100) ** 0.6) * (10**6)  # euro
+        self.tciRTF = 2.88 * ((self.max_cap["RTF"] / 100) ** 0.6) * (10**6)  # euro
+        self.tciCPF = 100 * ((self.max_cap["CPF"] / 278) ** 0.6) * (10**6)  # euro
+        self.tciDPF = 250 * ((self.max_cap["DPF"] / 278) ** 0.6) * (10**6)  # euro
+        # Calculating annualized capital investment cost (Then converting into per day)
+        self.fixedCF = (
+            self.rate * self.tciCF / (1 - (1 + self.rate) ** (-self.period)) / 360
+        )  # euro/day
+        self.fixedRTF = (
+            self.rate * self.tciRTF / (1 - (1 + self.rate) ** (-self.period)) / 360
+        )  # euro/day
+        self.fixedCPF = (
+            self.rate * self.tciCPF / (1 - (1 + self.rate) ** (-self.period)) / 360
+        )  # euro/day
+        self.fixedDPF = (
+            self.rate * self.tciDPF / (1 - (1 + self.rate) ** (-self.period)) / 360
+        )  # euro/day
+        # Calculating transportation cost - euro per km per ton
+        # For lightweight materials volume of the truck will be the limiting factor whereas for compressed materials and/or liquids mass will be the limiting factor.
+        self.timePenalty = (
+            (self.driver_wage / self.driver_hours + self.vehicle_cost_small)
+            / self.avg_speed
+            / (self.max_volume_small * self.rho_PU)
+        )
+        self.TCPU = (
+            (self.fuel_price * self.fuel_cons + self.toll_cost)
+            + (self.driver_wage / self.driver_hours + self.vehicle_cost)
+            / self.avg_speed
+        ) / (self.max_volume * self.rho_PU)
+        self.TCBRIQ = (
+            (self.fuel_price * self.fuel_cons + self.toll_cost)
+            + (self.driver_wage / self.driver_hours + self.vehicle_cost)
+            / self.avg_speed
+        ) / self.max_load
+        self.TCPO = (
+            (self.fuel_price * self.fuel_cons + self.toll_cost)
+            + (self.driver_wage / self.driver_hours + self.vehicle_cost_tanker)
+            / self.avg_speed
+        ) / (
+            self.rho_PO * 30
+        )  # 30 m^3 tanker
+        self.TCANL = (
+            (self.fuel_price * self.fuel_cons + self.toll_cost)
+            + (self.driver_wage / self.driver_hours + self.vehicle_cost_tanker)
+            / self.avg_speed
+        ) / (
+            self.rho_ANL * 45
+        )  # 45 m^3 tanker
+
+    def modelValueChain(self):
+        model = Model("ValueChain")
+
+        # b: Binary variables, representing open/close decisions
+        b = {}
+        # x: Continuous variables, representing material flows
+        x = {}
+
+        # ADDING VARIABLES
+
+        for p in self.P:
+            for i in self.S:
+                for j in self.CF:
+                    # Source > Collection Facility
+                    x[p, i, j] = model.addVar(
+                        vtype="CONTINUOUS", lb=0, name="x(%s,%s,%s)" % (p, i, j)
+                    )
+        # Collection Facility
+        for j in self.CF:
+            b[j] = model.addVar(vtype="BINARY", name="b(%s)" % j)
+
+        for p in self.P:
+            for j in self.CF:
+                for k in self.RTF:
+                    # Collection Facility > Recovery and Treatment Facility
+                    x[p, j, k] = model.addVar(
+                        vtype="CONTINUOUS", lb=0, name="x(%s,%s,%s)" % (p, j, k)
+                    )
+        # Recovery and Treatment Facility
+        for k in self.RTF:
+            b[k] = model.addVar(vtype="BINARY", name="b(%s)" % k)
+
+        for p in self.P:
+            for k in self.RTF:
+                for l in self.CPF:
+                    # Recovery and Treatment Facility > Chemical Processing Facility
+                    x[p, k, l] = model.addVar(
+                        vtype="CONTINUOUS", lb=0, name="x(%s,%s,%s)" % (p, k, l)
+                    )
+        # Chemical Processing Facility
+        for l in self.CPF:
+            b[l] = model.addVar(vtype="BINARY", name="b(%s)" % l)
+
+        for p in self.P:
+            for l in self.CPF:
+                for m in self.DPF:
+                    # Chemical Processing Facility > Downstream Processing Facility
+                    x[p, l, m] = model.addVar(
+                        vtype="CONTINUOUS", lb=0, name="x(%s,%s,%s)" % (p, l, m)
+                    )
+        # Downstream Processing Facility
+        for m in self.DPF:
+            b[m] = model.addVar(vtype="BINARY", name="b(%s)" % m)
+
+        for p in self.P:
+            for m in self.DPF:
+                for n in self.C:
+                    # Downstream Processing Facility > Customer
+                    x[p, m, n] = model.addVar(
+                        vtype="CONTINUOUS", lb=0, name="x(%s,%s,%s)" % (p, m, n)
+                    )
+
+        # ADDING CONSTRAINTS
+
+        # Demand satisfaction of customers
+        for p in self.P:
+            for n in self.C:
+                model.addCons(
+                    quicksum(x[p, m, n] for m in self.DPF) <= self.D[(p, n)],
+                    "Demand(%s,%s)" % (p, n),
+                )
+
+        # Capacity constraint for facilities
+        for j in self.CF:
+            model.addCons(
+                quicksum(x[p, i, j] for i in self.S for p in self.P)
+                <= b[j] * self.max_cap["CF"],
+                "Capacity(%s)" % j,
+            )
+        for k in self.RTF:
+            model.addCons(
+                quicksum(x[p, j, k] for j in self.CF for p in self.P)
+                <= b[k] * self.max_cap["RTF"],
+                "Capacity(%s)" % k,
+            )
+        for l in self.CPF:
+            model.addCons(
+                quicksum(x[p, k, l] for k in self.RTF for p in self.P)
+                <= b[l] * self.max_cap["CPF"],
+                "Capacity(%s)" % l,
+            )
+        for m in self.DPF:
+            model.addCons(
+                quicksum(x[p, l, m] for l in self.CPF for p in self.P)
+                <= b[m] * self.max_cap["DPF"],
+                "Capacity(%s)" % m,
+            )
+
+        # Driving time constraint for collection facilities
+        for i in self.S:
+            for j in self.CF:
+                model.addCons(
+                    quicksum(x[p, i, j] for p in self.P) * self.D1.loc[i, j]
+                    <= (quicksum(x[p, i, j] for p in self.P))
+                    * self.avg_speed
+                    * self.max_time,
+                    "Travel Time(%s,%s)" % (j, i),
+                )
+
+        # Flow conservation at sources
+        for p in self.P:
+            for i in self.S:
+                model.addCons(
+                    quicksum(x[p, i, j] for j in self.CF) == self.source_cap.loc[i, p],
+                    "Conservation(%s,%s)" % (p, i),
+                )
+
+        # Flow conservation at facilities
+        for p in self.P:
+            for j in self.CF:
+                # End-of-life PU is the input > End-of-life PU is the output (Type 1 and Type 2)
+                model.addCons(
+                    self.yield_factor[(p, "CF")] * quicksum(x[p, i, j] for i in self.S)
+                    == quicksum(x[p, j, k] for k in self.RTF),
+                    "Conservation(%s,%s)" % (p, j),
+                )
+            for k in self.RTF:
+                # End-of-life PU is the input (Type 1 and Type 2) > Briquette is the output
+                model.addCons(
+                    self.yield_factor[(p, "RTF")]
+                    * quicksum(x[p, j, k] for j in self.CF for p in self.PP)
+                    == quicksum(x[p, k, l] for l in self.CPF),
+                    "Conservation(%s,%s)" % (p, k),
+                )
+            for l in self.CPF:
+                # Briquette is the input > Pyrolysis oil is the output
+                model.addCons(
+                    self.yield_factor[(p, "CPF")]
+                    * quicksum(x[p, k, l] for k in self.RTF for p in self.PP)
+                    == quicksum(x[p, l, m] for m in self.DPF),
+                    "Conservation(%s,%s)" % (p, l),
+                )
+            for m in self.DPF:
+                # Pyrolysis oil is the input > Aniline and toluidine are the output
+                model.addCons(
+                    self.yield_factor[(p, "DPF")]
+                    * quicksum(x[p, l, m] for l in self.CPF for p in self.PP)
+                    == quicksum(x[p, m, n] for n in self.C),
+                    "Conservation(%s,%s)" % (p, m),
+                )
+
+        # Objective function
+        model.setObjective(
+            quicksum(
+                self.market_price[p]
+                * quicksum(x[p, m, n] for m in self.DPF for n in self.C)
+                for p in self.P
+            )
+            - (
+                quicksum(self.fixedCF * b[j] for j in self.CF)
+                + quicksum(self.fixedRTF * b[k] for k in self.RTF)
+                + quicksum(self.fixedCPF * b[l] for l in self.CPF)
+                + quicksum(self.fixedDPF * b[m] for m in self.DPF)
+            )
+            - (
+                quicksum(
+                    self.variable_CF
+                    * quicksum(x[p, i, j] for i in self.S for p in self.P)
+                    for j in self.CF
+                )
+                + quicksum(
+                    self.variable_RTF
+                    * quicksum(x[p, j, k] for j in self.CF for p in self.P)
+                    for k in self.RTF
+                )
+                + quicksum(
+                    self.variable_CPF
+                    * quicksum(x[p, k, l] for k in self.RTF for p in self.P)
+                    for l in self.CPF
+                )
+                + quicksum(
+                    self.variable_DPF
+                    * quicksum(x[p, l, m] for l in self.CPF for p in self.P)
+                    for m in self.DPF
+                )
+            )
+            - (  # quicksum(2*self.D1.loc[i, j] * self.timePenalty * x[p, i, j] for i in self.S for j in self.CF for p in self.P) +
+                quicksum(
+                    2 * self.D2.loc[j, k] * self.TCPU * x[p, j, k]
+                    for j in self.CF
+                    for k in self.RTF
+                    for p in self.P
+                )
+                + quicksum(
+                    2 * self.D3.loc[k, l] * self.TCBRIQ * x[p, k, l]
+                    for k in self.RTF
+                    for l in self.CPF
+                    for p in self.P
+                )
+                + quicksum(
+                    2 * self.D4.loc[l, m] * self.TCPO * x[p, l, m]
+                    for l in self.CPF
+                    for m in self.DPF
+                    for p in self.P
+                )
+                + quicksum(
+                    2 * self.D5.loc[m, n] * self.TCANL * x[p, m, n]
+                    for m in self.DPF
+                    for n in self.C
+                    for p in self.P
+                )
+            ),
+            "maximize",
+        )
+        # (self.D1.loc[i, j]/(self.avg_speed * self.max_time)-1)
+
+        model.data = x, b
+
+        self.x = x
+        self.b = b
+        self.model = model
+
+    def getOutput(self):
+        self.OBJ = self.model.getObjVal()
+        print("\nObjective value (Profit) = {:.2f} euro/day".format(self.OBJ))
+
+        namelistCF = []
+        print("\nCollection Facilities")
+        for j in self.CF:
+            if self.model.getVal(self.b[j]) > 0.5:
+                print("\n")
+                print("{} = {:.2f}".format(j, self.model.getVal(self.b[j])))
+                namelistCF.append(j)
+                print(
+                    "Total inflow to {} is {:.2f}".format(
+                        j,
+                        sum(
+                            self.model.getVal(self.x[p, i, j])
+                            for i in self.S
+                            for p in self.P
+                        ),
+                    )
+                )
+                print(
+                    "Capacity utilization of {} is {:.2f}%".format(
+                        j,
+                        sum(
+                            self.model.getVal(self.x[p, i, j])
+                            for i in self.S
+                            for p in self.P
+                        )
+                        / self.max_cap["CF"]
+                        * 100,
+                    )
+                )
+            for p in self.P:
+                for i in self.S:
+                    if self.model.getVal(self.x[p, i, j]) > 0.001:
+                        print(
+                            "{} to {} = {:.2f} ton/day of {}".format(
+                                i, j, self.model.getVal(self.x[p, i, j]), p
+                            )
+                        )
+                for k in self.RTF:
+                    if self.model.getVal(self.x[p, j, k]) > 0.001:
+                        print(
+                            "{} to {} = {:.2f} ton/day of {}".format(
+                                j, k, self.model.getVal(self.x[p, j, k]), p
+                            )
+                        )
+
+        self.namelistCF = namelistCF
+
+        print(
+            "\nTotal number of open collection facilities = {:.2f}".format(
+                sum(self.model.getVal(self.b[j]) for j in self.CF)
+            )
+        )
+        print("\nList of open collection facilities:", self.namelistCF)
+
+        namelistRTF = []
+        print("\nRecovery and Treatment Facilities")
+        for k in self.RTF:
+            if self.model.getVal(self.b[k]) > 0.5:
+                print("\n")
+                print("{} = {:.2f}".format(k, self.model.getVal(self.b[k])))
+                namelistRTF.append(k)
+                print(
+                    "Total inflow to {} is {:.2f}".format(
+                        k,
+                        sum(
+                            self.model.getVal(self.x[p, j, k])
+                            for j in self.CF
+                            for p in self.P
+                        ),
+                    )
+                )
+                print(
+                    "Capacity utilization of {} is {:.2f}%".format(
+                        k,
+                        sum(
+                            self.model.getVal(self.x[p, j, k])
+                            for j in self.CF
+                            for p in self.P
+                        )
+                        / self.max_cap["RTF"]
+                        * 100,
+                    )
+                )
+            for p in self.P:
+                for j in self.CF:
+                    if self.model.getVal(self.x[p, j, k]) > 0.001:
+                        print(
+                            "{} to {} = {:.2f} ton/day of {} material".format(
+                                j, k, self.model.getVal(self.x[p, j, k]), p
+                            )
+                        )
+                for l in self.CPF:
+                    if self.model.getVal(self.x[p, k, l]) > 0.001:
+                        print(
+                            "{} to {} = {:.2f} ton/day of {} material".format(
+                                k, l, self.model.getVal(self.x[p, k, l]), p
+                            )
+                        )
+
+        self.namelistRTF = namelistRTF
+
+        print(
+            "\nTotal number of open recovery and treatment facilities = {:.2f}".format(
+                sum(self.model.getVal(self.b[k]) for k in self.RTF)
+            )
+        )
+        print("\nList of open recovery and treatment facilities:", self.namelistRTF)
+
+        namelistCPF = []
+        for l in self.CPF:
+            if self.model.getVal(self.b[l]) > 0.5:
+                print("\n")
+                print("{} = {:.2f}".format(l, self.model.getVal(self.b[l])))
+                namelistCPF.append(l)
+                print(
+                    "Total inflow to {} is {:.2f}".format(
+                        l,
+                        sum(
+                            self.model.getVal(self.x[p, k, l])
+                            for k in self.RTF
+                            for p in self.P
+                        ),
+                    )
+                )
+                print(
+                    "Capacity utilization of {} is {:.2f}%".format(
+                        l,
+                        sum(
+                            self.model.getVal(self.x[p, k, l])
+                            for k in self.RTF
+                            for p in self.P
+                        )
+                        / self.max_cap["CPF"]
+                        * 100,
+                    )
+                )
+            for p in self.P:
+                for k in self.RTF:
+                    if self.model.getVal(self.x[p, k, l]) > 0.001:
+                        print(
+                            "{} to {} = {:.2f} ton/day of {}".format(
+                                k, l, self.model.getVal(self.x[p, k, l]), p
+                            )
+                        )
+                for m in self.DPF:
+                    if self.model.getVal(self.x[p, l, m]) > 0.001:
+                        print(
+                            "{} to {} = {:.2f} ton/day of {}".format(
+                                l, m, self.model.getVal(self.x[p, l, m]), p
+                            )
+                        )
+
+        self.namelistCPF = namelistCPF
+
+        print(
+            "\nTotal number of open chemical processing facilities = {:.2f}".format(
+                sum(self.model.getVal(self.b[l]) for l in self.CPF)
+            )
+        )
+        print("\nList of open chemical processing facilities:", self.namelistCPF)
+
+        namelistDPF = []
+        for m in self.DPF:
+            if self.model.getVal(self.b[m]) > 0.5:
+                print("\n")
+                print("{} = {:.2f}".format(m, self.model.getVal(self.b[m])))
+                namelistDPF.append(m)
+                print(
+                    "Total inflow to {} is {:.2f}".format(
+                        m,
+                        sum(
+                            self.model.getVal(self.x[p, l, m])
+                            for l in self.CPF
+                            for p in self.P
+                        ),
+                    )
+                )
+                print(
+                    "Capacity utilization of {} is {:.2f}%".format(
+                        m,
+                        sum(
+                            self.model.getVal(self.x[p, l, m])
+                            for l in self.CPF
+                            for p in self.P
+                        )
+                        / self.max_cap["DPF"]
+                        * 100,
+                    )
+                )
+            for p in self.P:
+                for l in self.CPF:
+                    if self.model.getVal(self.x[p, l, m]) > 0.001:
+                        print(
+                            "{} to {} = {:.2f} ton/day of {}".format(
+                                l, m, self.model.getVal(self.x[p, l, m]), p
+                            )
+                        )
+                for n in self.C:
+                    if self.model.getVal(self.x[p, m, n]) > 0.001:
+                        print(
+                            "{} to {} = {:.2f} ton/day of {}".format(
+                                m, n, self.model.getVal(self.x[p, m, n]), p
+                            )
+                        )
+
+        self.namelistDPF = namelistDPF
+
+        print(
+            "\nTotal number of open downstream processing facilities = {:.2f}".format(
+                sum(self.model.getVal(self.b[m]) for m in self.DPF)
+            )
+        )
+        print("\nList of open downstream processing facilities:", self.namelistDPF)
+
+        DSAT = {}
+        print("\n")
+        for p in self.P:
+            for n in self.C:
+                DSAT[(p, n)] = sum(self.model.getVal(self.x[p, m, n]) for m in self.DPF)
+                print(
+                    "\nDemand Satisfaction of {} = {:.2f} ton/day {}".format(
+                        n, DSAT[(p, n)], p
+                    )
+                )
+        self.DSAT = DSAT
+
+        print("\nObjective Function Breakdown:")
+
+        print("\nRevenue:")
+        self.Revenue = sum(
+            sum(self.market_price[p] * self.DSAT[(p, n)] for n in self.C)
+            for p in self.P
+        )
+        print("The total revenue is {:.2f} euro/day".format(self.Revenue))
+
+        print("\nLogistics Cost:")
+        # self.logCost1 = sum(2 * self.D1.loc[i, j] * self.timePenalty * sum(self.model.getVal(self.x[p, i, j]) for p in self.P) for i in self.S for j in self.CF)
+        # print('The transportation cost from Sources to Collection Facilities is {:.2f} euros per day'.format(self.logCost1))
+
+        self.logCost2 = sum(
+            2
+            * self.D2.loc[j, k]
+            * self.TCPU
+            * sum(self.model.getVal(self.x[p, j, k]) for p in self.P)
+            for j in self.CF
+            for k in self.RTF
+        )
+        print(
+            "The transportation cost from Collection Facilities to Recovery and Treatment Facilities is {:.2f} euro/day".format(
+                self.logCost2
+            )
+        )
+
+        self.logCost3 = sum(
+            2
+            * self.D3.loc[k, l]
+            * self.TCBRIQ
+            * sum(self.model.getVal(self.x[p, k, l]) for p in self.P)
+            for k in self.RTF
+            for l in self.CPF
+        )
+        print(
+            "The transportation cost from Recovery and Treatment Facilities to Chemical Processing Facilities is {:.2f} euro/day".format(
+                self.logCost3
+            )
+        )
+
+        self.logCost4 = sum(
+            2
+            * self.D4.loc[l, m]
+            * self.TCPO
+            * sum(self.model.getVal(self.x[p, l, m]) for p in self.P)
+            for l in self.CPF
+            for m in self.DPF
+        )
+        print(
+            "The transportation cost from Chemical Processing Facilities to Downstream Processing Facilities is {:.2f} euro/day".format(
+                self.logCost4
+            )
+        )
+
+        self.logCost5 = sum(
+            2
+            * self.D5.loc[m, n]
+            * self.TCANL
+            * sum(self.model.getVal(self.x[p, m, n]) for p in self.P)
+            for m in self.DPF
+            for n in self.C
+        )
+        print(
+            "The transportation cost from Downstream Processing Facilities to Customers is {:.2f} euro/day".format(
+                self.logCost5
+            )
+        )
+
+        print("\nCapital Investment Cost (CAPEX):")
+        self.capexCF = sum(self.fixedCF * self.model.getVal(self.b[j]) for j in self.CF)
+        self.capexRTF = sum(
+            self.fixedRTF * self.model.getVal(self.b[k]) for k in self.RTF
+        )
+        self.capexCPF = sum(
+            self.fixedCPF * self.model.getVal(self.b[l]) for l in self.CPF
+        )
+        self.capexDPF = sum(
+            self.fixedDPF * self.model.getVal(self.b[m]) for m in self.DPF
+        )
+        print(
+            "The total CAPEX of Collection Facilities is {:.2f} euro/day".format(
+                self.capexCF
+            )
+        )
+        print(
+            "The total CAPEX of Recovery and Treatment Facilities is {:.2f} euro/day".format(
+                self.capexRTF
+            )
+        )
+        print(
+            "The total CAPEX of Chemical Processing Facilities is {:.2f} euro/day".format(
+                self.capexCPF
+            )
+        )
+        print(
+            "The total CAPEX of Downstream Processing is {:.2f} euro/day".format(
+                self.capexDPF
+            )
+        )
+
+        print("\nOperating Cost (OPEX):")
+        self.opexCF = sum(
+            self.variable_CF
+            * sum(self.model.getVal(self.x[p, i, j]) for i in self.S for p in self.P)
+            for j in self.CF
+        )
+        self.opexRTF = sum(
+            self.variable_RTF
+            * sum(self.model.getVal(self.x[p, j, k]) for j in self.CF for p in self.P)
+            for k in self.RTF
+        )
+        self.opexCPF = sum(
+            self.variable_CPF
+            * sum(self.model.getVal(self.x[p, k, l]) for k in self.RTF for p in self.P)
+            for l in self.CPF
+        )
+        self.opexDPF = sum(
+            self.variable_DPF
+            * sum(self.model.getVal(self.x[p, l, m]) for l in self.CPF for p in self.P)
+            for m in self.DPF
+        )
+        print(
+            "The total OPEX of Collection Facilities is {:.2f} euro/day".format(
+                self.opexCF
+            )
+        )
+        print(
+            "The total OPEX of Recovery and Treatment Facilities is {:.2f} euro/day".format(
+                self.opexRTF
+            )
+        )
+        print(
+            "The total OPEX of Chemical Processing Facilities is {:.2f} euro/day".format(
+                self.opexCPF
+            )
+        )
+        print(
+            "The total OPEX of Downstream Processing is {:.2f} euro/day".format(
+                self.opexDPF
+            )
+        )
