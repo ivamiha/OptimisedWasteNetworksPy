@@ -74,13 +74,13 @@ scenario = optimisation.Infrastructure(
     distances[0], distances[1], distances[2], distances[3], distances[4]
 )
 
-# pass value chain parameters
+# define the value chain
 scenario.define_value_chain(
     products, source_capacity, facility_capacity, demand, yield_factor, market_price
 )
 
-# define the optimisation problem
-scenario.modelValueChain()
+# create optimisation model of the value chain
+scenario.model_value_chain()
 
 # solve the optimisation problem
 scenario.model.optimize()

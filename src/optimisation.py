@@ -1,6 +1,5 @@
-from pyscipopt import Model, quicksum
+import pyscipopt as scip
 import numpy as np
-import itertools
 
 
 class Infrastructure:
@@ -188,16 +187,21 @@ class Infrastructure:
             / self.avg_speed
         ) / (self.rho_ANL * 45)
 
-    def modelValueChain(self):
-        model = Model("ValueChain")
+    def model_value_chain(self):
+        """
+        Create optimisation model for the defined value chain utilising the
+        SCIPT solver
+        """
 
-        # b: Binary variables, representing open/close decisions
-        b = {}
-        # x: Continuous variables, representing material flows
-        x = {}
+        # initialise optimisation problem
+        model = scip.Model("value_chain")
 
-        # ADDING VARIABLES
+        # initialise variables whose scope is this function
+        b = {}  # binary variable, represents open/close decisions
+        x = {}  # continuous variable, represents material flows
 
+        # add solution variables to the optimisation problem
+        # product flows from S to CF
         for p in self.P:
             for i in self.S:
                 for j in self.CF:
@@ -205,195 +209,192 @@ class Infrastructure:
                     x[p, i, j] = model.addVar(
                         vtype="CONTINUOUS", lb=0, name="x(%s,%s,%s)" % (p, i, j)
                     )
-        # Collection Facility
-        for j in self.CF:
-            b[j] = model.addVar(vtype="BINARY", name="b(%s)" % j)
-
+        # product flows from CF to RTF
         for p in self.P:
             for j in self.CF:
                 for k in self.RTF:
-                    # Collection Facility > Recovery and Treatment Facility
                     x[p, j, k] = model.addVar(
                         vtype="CONTINUOUS", lb=0, name="x(%s,%s,%s)" % (p, j, k)
                     )
-        # Recovery and Treatment Facility
-        for k in self.RTF:
-            b[k] = model.addVar(vtype="BINARY", name="b(%s)" % k)
-
+        # product flows from RTF to CPF
         for p in self.P:
             for k in self.RTF:
                 for l in self.CPF:
-                    # Recovery and Treatment Facility > Chemical Processing Facility
                     x[p, k, l] = model.addVar(
                         vtype="CONTINUOUS", lb=0, name="x(%s,%s,%s)" % (p, k, l)
                     )
-        # Chemical Processing Facility
-        for l in self.CPF:
-            b[l] = model.addVar(vtype="BINARY", name="b(%s)" % l)
-
+        # product flows from CPF to DPF
         for p in self.P:
             for l in self.CPF:
                 for m in self.DPF:
-                    # Chemical Processing Facility > Downstream Processing Facility
                     x[p, l, m] = model.addVar(
                         vtype="CONTINUOUS", lb=0, name="x(%s,%s,%s)" % (p, l, m)
                     )
-        # Downstream Processing Facility
-        for m in self.DPF:
-            b[m] = model.addVar(vtype="BINARY", name="b(%s)" % m)
-
+        # product flows from DPF to C
         for p in self.P:
             for m in self.DPF:
                 for n in self.C:
-                    # Downstream Processing Facility > Customer
                     x[p, m, n] = model.addVar(
                         vtype="CONTINUOUS", lb=0, name="x(%s,%s,%s)" % (p, m, n)
                     )
-
-        # ADDING CONSTRAINTS
-
-        # Demand satisfaction of customers
-        for p in self.P:
-            for n in self.C:
-                model.addCons(
-                    quicksum(x[p, m, n] for m in self.DPF) <= self.D[(p, n)],
-                    "Demand(%s,%s)" % (p, n),
-                )
-
-        # Capacity constraint for facilities
+        # CF installation binary outcomes
         for j in self.CF:
-            model.addCons(
-                quicksum(x[p, i, j] for i in self.S for p in self.P)
-                <= b[j] * self.facility_cap["CF"],
-                "Capacity(%s)" % j,
-            )
+            b[j] = model.addVar(vtype="BINARY", name="b(%s)" % j)
+        # RTF installation binary outcomes
         for k in self.RTF:
-            model.addCons(
-                quicksum(x[p, j, k] for j in self.CF for p in self.P)
-                <= b[k] * self.facility_cap["RTF"],
-                "Capacity(%s)" % k,
-            )
+            b[k] = model.addVar(vtype="BINARY", name="b(%s)" % k)
+        # CPF installation binary outcomes
         for l in self.CPF:
-            model.addCons(
-                quicksum(x[p, k, l] for k in self.RTF for p in self.P)
-                <= b[l] * self.facility_cap["CPF"],
-                "Capacity(%s)" % l,
-            )
+            b[l] = model.addVar(vtype="BINARY", name="b(%s)" % l)
+        # DPF installation binary outcomes
         for m in self.DPF:
-            model.addCons(
-                quicksum(x[p, l, m] for l in self.CPF for p in self.P)
-                <= b[m] * self.facility_cap["DPF"],
-                "Capacity(%s)" % m,
-            )
+            b[m] = model.addVar(vtype="BINARY", name="b(%s)" % m)
 
-        # Driving time constraint for collection facilities
-        for i in self.S:
-            for j in self.CF:
-                model.addCons(
-                    quicksum(x[p, i, j] for p in self.P) * self.D1.loc[i, j]
-                    <= (quicksum(x[p, i, j] for p in self.P))
-                    * self.avg_speed
-                    * self.max_time,
-                    "Travel Time(%s,%s)" % (j, i),
-                )
-
-        # Flow conservation at sources
+        # add constraint for flow conservation at sources to the model
         for p in self.P:
             for i in self.S:
                 model.addCons(
-                    quicksum(x[p, i, j] for j in self.CF) == self.source_cap.loc[i, p],
-                    "Conservation(%s,%s)" % (p, i),
+                    scip.quicksum(x[p, i, j] for j in self.CF)
+                    == self.source_cap.loc[i, p],
+                    name="Conservation(%s,%s)" % (p, i),
                 )
 
-        # Flow conservation at facilities
+        # add constraints for flow conservation at facilities to the model
         for p in self.P:
             for j in self.CF:
-                # End-of-life PU is the input > End-of-life PU is the output (Type 1 and Type 2)
+                # input PU, output PU
                 model.addCons(
-                    self.yield_factor[(p, "CF")] * quicksum(x[p, i, j] for i in self.S)
-                    == quicksum(x[p, j, k] for k in self.RTF),
-                    "Conservation(%s,%s)" % (p, j),
+                    self.yield_factor[(p, "CF")]
+                    * scip.quicksum(x[p, i, j] for i in self.S)
+                    == scip.quicksum(x[p, j, k] for k in self.RTF),
+                    name="Conservation(%s,%s)" % (p, j),
                 )
             for k in self.RTF:
-                # End-of-life PU is the input (Type 1 and Type 2) > Briquette is the output
+                # input PU, output briquette
                 model.addCons(
                     self.yield_factor[(p, "RTF")]
-                    * quicksum(x[p, j, k] for j in self.CF for p in self.PP)
-                    == quicksum(x[p, k, l] for l in self.CPF),
-                    "Conservation(%s,%s)" % (p, k),
+                    * scip.quicksum(x[p, j, k] for j in self.CF for p in self.PP)
+                    == scip.quicksum(x[p, k, l] for l in self.CPF),
+                    name="Conservation(%s,%s)" % (p, k),
                 )
             for l in self.CPF:
-                # Briquette is the input > Pyrolysis oil is the output
+                # input briquette, output pyrolysis oil
                 model.addCons(
                     self.yield_factor[(p, "CPF")]
-                    * quicksum(x[p, k, l] for k in self.RTF for p in self.PP)
-                    == quicksum(x[p, l, m] for m in self.DPF),
-                    "Conservation(%s,%s)" % (p, l),
+                    * scip.quicksum(x[p, k, l] for k in self.RTF for p in self.PP)
+                    == scip.quicksum(x[p, l, m] for m in self.DPF),
+                    name="Conservation(%s,%s)" % (p, l),
                 )
             for m in self.DPF:
-                # Pyrolysis oil is the input > Aniline and toluidine are the output
+                # input pyrolysis oil, output aniline & toluidine
                 model.addCons(
                     self.yield_factor[(p, "DPF")]
-                    * quicksum(x[p, l, m] for l in self.CPF for p in self.PP)
-                    == quicksum(x[p, m, n] for n in self.C),
-                    "Conservation(%s,%s)" % (p, m),
+                    * scip.quicksum(x[p, l, m] for l in self.CPF for p in self.PP)
+                    == scip.quicksum(x[p, m, n] for n in self.C),
+                    name="Conservation(%s,%s)" % (p, m),
+                )
+
+        # add capacity constraint for the facilities to the model
+        for j in self.CF:
+            model.addCons(
+                scip.quicksum(x[p, i, j] for i in self.S for p in self.P)
+                <= b[j] * self.facility_cap["CF"],
+                name="Capacity(%s)" % j,
+            )
+        for k in self.RTF:
+            model.addCons(
+                scip.quicksum(x[p, j, k] for j in self.CF for p in self.P)
+                <= b[k] * self.facility_cap["RTF"],
+                name="Capacity(%s)" % k,
+            )
+        for l in self.CPF:
+            model.addCons(
+                scip.quicksum(x[p, k, l] for k in self.RTF for p in self.P)
+                <= b[l] * self.facility_cap["CPF"],
+                name="Capacity(%s)" % l,
+            )
+        for m in self.DPF:
+            model.addCons(
+                scip.quicksum(x[p, l, m] for l in self.CPF for p in self.P)
+                <= b[m] * self.facility_cap["DPF"],
+                name="Capacity(%s)" % m,
+            )
+
+        # add demand satisfaction constraint to the model
+        for p in self.P:
+            for n in self.C:
+                model.addCons(
+                    scip.quicksum(x[p, m, n] for m in self.DPF) <= self.D[(p, n)],
+                    name="Demand(%s,%s)" % (p, n),
+                )
+
+        # add driving time constraint for CFs to the model
+        # NOTE: this is a new constraint not mentioned in the paper, ...
+        for i in self.S:
+            for j in self.CF:
+                model.addCons(
+                    scip.quicksum(x[p, i, j] for p in self.P) * self.D1.loc[i, j]
+                    <= (scip.quicksum(x[p, i, j] for p in self.P))
+                    * self.avg_speed
+                    * self.max_time,
+                    name="Travel Time(%s,%s)" % (j, i),
                 )
 
         # Objective function
         model.setObjective(
-            quicksum(
+            scip.quicksum(
                 self.market_price[p]
-                * quicksum(x[p, m, n] for m in self.DPF for n in self.C)
+                * scip.quicksum(x[p, m, n] for m in self.DPF for n in self.C)
                 for p in self.P
             )
             - (
-                quicksum(self.fixed_CF * b[j] for j in self.CF)
-                + quicksum(self.fixed_RTF * b[k] for k in self.RTF)
-                + quicksum(self.fixed_CPF * b[l] for l in self.CPF)
-                + quicksum(self.fixed_DPF * b[m] for m in self.DPF)
+                scip.quicksum(self.fixed_CF * b[j] for j in self.CF)
+                + scip.quicksum(self.fixed_RTF * b[k] for k in self.RTF)
+                + scip.quicksum(self.fixed_CPF * b[l] for l in self.CPF)
+                + scip.quicksum(self.fixed_DPF * b[m] for m in self.DPF)
             )
             - (
-                quicksum(
+                scip.quicksum(
                     self.variable_CF
-                    * quicksum(x[p, i, j] for i in self.S for p in self.P)
+                    * scip.quicksum(x[p, i, j] for i in self.S for p in self.P)
                     for j in self.CF
                 )
-                + quicksum(
+                + scip.quicksum(
                     self.variable_RTF
-                    * quicksum(x[p, j, k] for j in self.CF for p in self.P)
+                    * scip.quicksum(x[p, j, k] for j in self.CF for p in self.P)
                     for k in self.RTF
                 )
-                + quicksum(
+                + scip.quicksum(
                     self.variable_CPF
-                    * quicksum(x[p, k, l] for k in self.RTF for p in self.P)
+                    * scip.quicksum(x[p, k, l] for k in self.RTF for p in self.P)
                     for l in self.CPF
                 )
-                + quicksum(
+                + scip.quicksum(
                     self.variable_DPF
-                    * quicksum(x[p, l, m] for l in self.CPF for p in self.P)
+                    * scip.quicksum(x[p, l, m] for l in self.CPF for p in self.P)
                     for m in self.DPF
                 )
             )
-            - (  # quicksum(2*self.D1.loc[i, j] * self.time_penalty * x[p, i, j] for i in self.S for j in self.CF for p in self.P) +
-                quicksum(
+            - (  # scip.quicksum(2*self.D1.loc[i, j] * self.time_penalty * x[p, i, j] for i in self.S for j in self.CF for p in self.P) +
+                scip.quicksum(
                     2 * self.D2.loc[j, k] * self.TC_PU * x[p, j, k]
                     for j in self.CF
                     for k in self.RTF
                     for p in self.P
                 )
-                + quicksum(
+                + scip.quicksum(
                     2 * self.D3.loc[k, l] * self.TC_BRIQ * x[p, k, l]
                     for k in self.RTF
                     for l in self.CPF
                     for p in self.P
                 )
-                + quicksum(
+                + scip.quicksum(
                     2 * self.D4.loc[l, m] * self.TC_PO * x[p, l, m]
                     for l in self.CPF
                     for m in self.DPF
                     for p in self.P
                 )
-                + quicksum(
+                + scip.quicksum(
                     2 * self.D5.loc[m, n] * self.TC_ANL * x[p, m, n]
                     for m in self.DPF
                     for n in self.C
