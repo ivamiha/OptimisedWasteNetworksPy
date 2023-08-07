@@ -1,5 +1,4 @@
 import pyscipopt as scip
-import numpy as np
 
 
 class Infrastructure:
@@ -329,7 +328,7 @@ class Infrastructure:
                 )
 
         # add driving time constraint for CFs to the model
-        # NOTE: this is a new constraint not mentioned in the paper, ...
+        # NOTE: this is a new constraint not mentioned in the paper
         for i in self.S:
             for j in self.CF:
                 model.addCons(
@@ -340,7 +339,7 @@ class Infrastructure:
                     name="Travel Time(%s,%s)" % (j, i),
                 )
 
-        # Objective function
+        # add objective function to the model
         model.setObjective(
             scip.quicksum(
                 self.market_price[p]
@@ -375,8 +374,14 @@ class Infrastructure:
                     for m in self.DPF
                 )
             )
-            - (  # scip.quicksum(2*self.D1.loc[i, j] * self.time_penalty * x[p, i, j] for i in self.S for j in self.CF for p in self.P) +
+            - (
                 scip.quicksum(
+                    2 * self.D1.loc[i, j] * self.time_penalty * x[p, i, j]
+                    for i in self.S
+                    for j in self.CF
+                    for p in self.P
+                )
+                + scip.quicksum(
                     2 * self.D2.loc[j, k] * self.TC_PU * x[p, j, k]
                     for j in self.CF
                     for k in self.RTF
@@ -403,7 +408,6 @@ class Infrastructure:
             ),
             "maximize",
         )
-        # (self.D1.loc[i, j]/(self.avg_speed * self.max_time)-1)
 
         model.data = x, b
 
