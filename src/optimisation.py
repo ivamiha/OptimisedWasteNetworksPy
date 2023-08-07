@@ -26,7 +26,7 @@ class Infrastructure:
     rho_BRIQ = 0.60  # density of briquette [ton/m^3]
     rho_PO = 0.80  # density of pyrolysis oil [ton/m^3]
     rho_ANL = 1.00  # density of aniline [ton/m^3]
-    max_time = 1  # maximum transportation between facilities [hours]
+    max_time = 100  # maximum transportation between facilities [hours]
     variable_CF = 15  # operational costs of CF [euro/ton]
     variable_RTF = 46  # operational cost of RTF [euro/ton]
     variable_CPF = 500  # operational cost of CPF [euro/ton]

@@ -8,7 +8,7 @@ import pandas as pd
 n = 5
 
 # generate region defined by distances between sources & sinks
-distances = network.region_generator(100, n, [1, 23])
+distances = network.region_generator(10, n, [1])
 
 # specify product set for the value chain
 products = ["Type1", "Type2", "Briq", "pyrOil", "ANL", "P-TOL"]
@@ -19,7 +19,7 @@ for idx in range(0, n * n):
     s_list.append("S_" + str(idx))
     for jdx in range(0, len(products)):
         if jdx == 0 or jdx == 1:
-            s_values.append(random.uniform(0, 10))
+            s_values.append(random.uniform(0, 1))
         else:
             s_values.append(0)
 s_values = np.array(s_values).reshape((n * n, len(products)))
@@ -67,7 +67,8 @@ yield_factor = {
 }
 
 # specify maximum facility capacities
-facility_capacity = {"CF": 20, "RTF": 15, "CPF": 35, "DPF": 30}
+# facility_capacity = {"CF": 20, "RTF": 15, "CPF": 35, "DPF": 30}
+facility_capacity = {"CF": 2000, "RTF": 1500, "CPF": 3500, "DPF": 3000}
 
 # initiate ``Infrastructure`` class based on distances from building network
 scenario = optimisation.Infrastructure(
