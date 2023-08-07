@@ -111,7 +111,7 @@ class Infrastructure:
         self.source_cap = source_capacity
         self.yield_factor = yield_factor
         self.market_price = market_price
-        self.max_cap = facility_capacity
+        self.facility_cap = facility_capacity
 
         # generate list with product and customer location pairs
         key_list_C = []
@@ -135,55 +135,58 @@ class Infrastructure:
                 idx = 0
         self.D = D
 
-        # Calculating total capital invesment cost wrt capacity
-        self.tciCF = 1.45 * ((self.max_cap["CF"] / 100) ** 0.6) * (10**6)  # euro
-        self.tciRTF = 2.88 * ((self.max_cap["RTF"] / 100) ** 0.6) * (10**6)  # euro
-        self.tciCPF = 100 * ((self.max_cap["CPF"] / 278) ** 0.6) * (10**6)  # euro
-        self.tciDPF = 250 * ((self.max_cap["DPF"] / 278) ** 0.6) * (10**6)  # euro
-        # Calculating annualized capital investment cost (Then converting into per day)
-        self.fixedCF = (
-            self.rate * self.tciCF / (1 - (1 + self.rate) ** (-self.period)) / 360
-        )  # euro/day
-        self.fixedRTF = (
-            self.rate * self.tciRTF / (1 - (1 + self.rate) ** (-self.period)) / 360
-        )  # euro/day
-        self.fixedCPF = (
-            self.rate * self.tciCPF / (1 - (1 + self.rate) ** (-self.period)) / 360
-        )  # euro/day
-        self.fixedDPF = (
-            self.rate * self.tciDPF / (1 - (1 + self.rate) ** (-self.period)) / 360
-        )  # euro/day
-        # Calculating transportation cost - euro per km per ton
-        # For lightweight materials volume of the truck will be the limiting factor whereas for compressed materials and/or liquids mass will be the limiting factor.
-        self.timePenalty = (
+        # calculate total capital invesment cost wrt capacity [euro]
+        self.TCI_CF = 1.45 * ((self.facility_cap["CF"] / 100) ** 0.6) * (10**6)
+        self.TCI_RTF = 2.88 * ((self.facility_cap["RTF"] / 100) ** 0.6) * (10**6)
+        self.TCI_CPF = 100 * ((self.facility_cap["CPF"] / 278) ** 0.6) * (10**6)
+        self.TCI_DPF = 250 * ((self.facility_cap["DPF"] / 278) ** 0.6) * (10**6)
+
+        # calculate annualized capital investment cost per day [euro/day]
+        self.fixed_CF = (
+            self.rate * self.TCI_CF / (1 - (1 + self.rate) ** (-self.period)) / 360
+        )
+        self.fixed_RTF = (
+            self.rate * self.TCI_RTF / (1 - (1 + self.rate) ** (-self.period)) / 360
+        )
+        self.fixed_CPF = (
+            self.rate * self.TCI_CPF / (1 - (1 + self.rate) ** (-self.period)) / 360
+        )
+        self.fixed_DPF = (
+            self.rate * self.TCI_DPF / (1 - (1 + self.rate) ** (-self.period)) / 360
+        )
+
+        # calculate transportation costs [euro/(km*ton)]
+        # NOTE: need to use function which actually tests whether load or
+        # volume are the limiting factor, not guessing as it currently is
+        self.time_penalty = (
             (self.driver_wage / self.driver_hours + self.vehicle_cost_small)
             / self.avg_speed
             / (self.max_volume_small * self.rho_PU)
         )
-        self.TCPU = (
+        # assume volume is the limiting factor
+        self.TC_PU = (
             (self.fuel_price * self.fuel_cons + self.toll_cost)
             + (self.driver_wage / self.driver_hours + self.vehicle_cost)
             / self.avg_speed
         ) / (self.max_volume * self.rho_PU)
-        self.TCBRIQ = (
+        # assume load is limiting factor
+        self.TC_BRIQ = (
             (self.fuel_price * self.fuel_cons + self.toll_cost)
             + (self.driver_wage / self.driver_hours + self.vehicle_cost)
             / self.avg_speed
         ) / self.max_load
-        self.TCPO = (
+        # assume load is limiting factor, using 30 m^3 tanker
+        self.TC_PO = (
             (self.fuel_price * self.fuel_cons + self.toll_cost)
             + (self.driver_wage / self.driver_hours + self.vehicle_cost_tanker)
             / self.avg_speed
-        ) / (
-            self.rho_PO * 30
-        )  # 30 m^3 tanker
-        self.TCANL = (
+        ) / (self.rho_PO * 30)
+        # assume load is limiting factor, using 45 m^3 tanker
+        self.TC_ANL = (
             (self.fuel_price * self.fuel_cons + self.toll_cost)
             + (self.driver_wage / self.driver_hours + self.vehicle_cost_tanker)
             / self.avg_speed
-        ) / (
-            self.rho_ANL * 45
-        )  # 45 m^3 tanker
+        ) / (self.rho_ANL * 45)
 
     def modelValueChain(self):
         model = Model("ValueChain")
@@ -261,25 +264,25 @@ class Infrastructure:
         for j in self.CF:
             model.addCons(
                 quicksum(x[p, i, j] for i in self.S for p in self.P)
-                <= b[j] * self.max_cap["CF"],
+                <= b[j] * self.facility_cap["CF"],
                 "Capacity(%s)" % j,
             )
         for k in self.RTF:
             model.addCons(
                 quicksum(x[p, j, k] for j in self.CF for p in self.P)
-                <= b[k] * self.max_cap["RTF"],
+                <= b[k] * self.facility_cap["RTF"],
                 "Capacity(%s)" % k,
             )
         for l in self.CPF:
             model.addCons(
                 quicksum(x[p, k, l] for k in self.RTF for p in self.P)
-                <= b[l] * self.max_cap["CPF"],
+                <= b[l] * self.facility_cap["CPF"],
                 "Capacity(%s)" % l,
             )
         for m in self.DPF:
             model.addCons(
                 quicksum(x[p, l, m] for l in self.CPF for p in self.P)
-                <= b[m] * self.max_cap["DPF"],
+                <= b[m] * self.facility_cap["DPF"],
                 "Capacity(%s)" % m,
             )
 
@@ -344,10 +347,10 @@ class Infrastructure:
                 for p in self.P
             )
             - (
-                quicksum(self.fixedCF * b[j] for j in self.CF)
-                + quicksum(self.fixedRTF * b[k] for k in self.RTF)
-                + quicksum(self.fixedCPF * b[l] for l in self.CPF)
-                + quicksum(self.fixedDPF * b[m] for m in self.DPF)
+                quicksum(self.fixed_CF * b[j] for j in self.CF)
+                + quicksum(self.fixed_RTF * b[k] for k in self.RTF)
+                + quicksum(self.fixed_CPF * b[l] for l in self.CPF)
+                + quicksum(self.fixed_DPF * b[m] for m in self.DPF)
             )
             - (
                 quicksum(
@@ -371,27 +374,27 @@ class Infrastructure:
                     for m in self.DPF
                 )
             )
-            - (  # quicksum(2*self.D1.loc[i, j] * self.timePenalty * x[p, i, j] for i in self.S for j in self.CF for p in self.P) +
+            - (  # quicksum(2*self.D1.loc[i, j] * self.time_penalty * x[p, i, j] for i in self.S for j in self.CF for p in self.P) +
                 quicksum(
-                    2 * self.D2.loc[j, k] * self.TCPU * x[p, j, k]
+                    2 * self.D2.loc[j, k] * self.TC_PU * x[p, j, k]
                     for j in self.CF
                     for k in self.RTF
                     for p in self.P
                 )
                 + quicksum(
-                    2 * self.D3.loc[k, l] * self.TCBRIQ * x[p, k, l]
+                    2 * self.D3.loc[k, l] * self.TC_BRIQ * x[p, k, l]
                     for k in self.RTF
                     for l in self.CPF
                     for p in self.P
                 )
                 + quicksum(
-                    2 * self.D4.loc[l, m] * self.TCPO * x[p, l, m]
+                    2 * self.D4.loc[l, m] * self.TC_PO * x[p, l, m]
                     for l in self.CPF
                     for m in self.DPF
                     for p in self.P
                 )
                 + quicksum(
-                    2 * self.D5.loc[m, n] * self.TCANL * x[p, m, n]
+                    2 * self.D5.loc[m, n] * self.TC_ANL * x[p, m, n]
                     for m in self.DPF
                     for n in self.C
                     for p in self.P
@@ -436,7 +439,7 @@ class Infrastructure:
                             for i in self.S
                             for p in self.P
                         )
-                        / self.max_cap["CF"]
+                        / self.facility_cap["CF"]
                         * 100,
                     )
                 )
@@ -490,7 +493,7 @@ class Infrastructure:
                             for j in self.CF
                             for p in self.P
                         )
-                        / self.max_cap["RTF"]
+                        / self.facility_cap["RTF"]
                         * 100,
                     )
                 )
@@ -543,7 +546,7 @@ class Infrastructure:
                             for k in self.RTF
                             for p in self.P
                         )
-                        / self.max_cap["CPF"]
+                        / self.facility_cap["CPF"]
                         * 100,
                     )
                 )
@@ -596,7 +599,7 @@ class Infrastructure:
                             for l in self.CPF
                             for p in self.P
                         )
-                        / self.max_cap["DPF"]
+                        / self.facility_cap["DPF"]
                         * 100,
                     )
                 )
@@ -647,13 +650,13 @@ class Infrastructure:
         print("The total revenue is {:.2f} euro/day".format(self.Revenue))
 
         print("\nLogistics Cost:")
-        # self.logCost1 = sum(2 * self.D1.loc[i, j] * self.timePenalty * sum(self.model.getVal(self.x[p, i, j]) for p in self.P) for i in self.S for j in self.CF)
+        # self.logCost1 = sum(2 * self.D1.loc[i, j] * self.time_penalty * sum(self.model.getVal(self.x[p, i, j]) for p in self.P) for i in self.S for j in self.CF)
         # print('The transportation cost from Sources to Collection Facilities is {:.2f} euros per day'.format(self.logCost1))
 
         self.logCost2 = sum(
             2
             * self.D2.loc[j, k]
-            * self.TCPU
+            * self.TC_PU
             * sum(self.model.getVal(self.x[p, j, k]) for p in self.P)
             for j in self.CF
             for k in self.RTF
@@ -667,7 +670,7 @@ class Infrastructure:
         self.logCost3 = sum(
             2
             * self.D3.loc[k, l]
-            * self.TCBRIQ
+            * self.TC_BRIQ
             * sum(self.model.getVal(self.x[p, k, l]) for p in self.P)
             for k in self.RTF
             for l in self.CPF
@@ -681,7 +684,7 @@ class Infrastructure:
         self.logCost4 = sum(
             2
             * self.D4.loc[l, m]
-            * self.TCPO
+            * self.TC_PO
             * sum(self.model.getVal(self.x[p, l, m]) for p in self.P)
             for l in self.CPF
             for m in self.DPF
@@ -695,7 +698,7 @@ class Infrastructure:
         self.logCost5 = sum(
             2
             * self.D5.loc[m, n]
-            * self.TCANL
+            * self.TC_ANL
             * sum(self.model.getVal(self.x[p, m, n]) for p in self.P)
             for m in self.DPF
             for n in self.C
@@ -707,15 +710,17 @@ class Infrastructure:
         )
 
         print("\nCapital Investment Cost (CAPEX):")
-        self.capexCF = sum(self.fixedCF * self.model.getVal(self.b[j]) for j in self.CF)
+        self.capexCF = sum(
+            self.fixed_CF * self.model.getVal(self.b[j]) for j in self.CF
+        )
         self.capexRTF = sum(
-            self.fixedRTF * self.model.getVal(self.b[k]) for k in self.RTF
+            self.fixed_RTF * self.model.getVal(self.b[k]) for k in self.RTF
         )
         self.capexCPF = sum(
-            self.fixedCPF * self.model.getVal(self.b[l]) for l in self.CPF
+            self.fixed_CPF * self.model.getVal(self.b[l]) for l in self.CPF
         )
         self.capexDPF = sum(
-            self.fixedDPF * self.model.getVal(self.b[m]) for m in self.DPF
+            self.fixed_DPF * self.model.getVal(self.b[m]) for m in self.DPF
         )
         print(
             "The total CAPEX of Collection Facilities is {:.2f} euro/day".format(
