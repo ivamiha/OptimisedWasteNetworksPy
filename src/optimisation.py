@@ -1,4 +1,6 @@
 import pyscipopt as scip
+import pandas as pd
+import matplotlib.pyplot as plt
 
 
 class Infrastructure:
@@ -794,3 +796,21 @@ class Infrastructure:
         print("OPEX of RTFs is {:.2f} euro/day".format(self.opex_RTF))
         print("OPEX of CPFs is {:.2f} euro/day".format(self.opex_CPF))
         print("OPEX of DPFs is {:.2f} euro/day".format(self.opex_DPF))
+
+        # convert source_cap DataFrame to list containing row sums
+        source_cap_row_sums = self.source_cap.sum(axis=1).to_list()
+        # extract source coordinates to list
+        sources = pd.read_csv("coordinates_sources.csv")
+        x_coordinates = sources["xcord"].to_list()
+        y_coordinates = sources["ycord"].to_list()
+        # use source row sums to create scatter plot with scaled source size
+        fig, ax = plt.subplots()
+        ax.scatter(x_coordinates, y_coordinates, c="k", s=source_cap_row_sums)
+        ax.set_xlabel("Horizontal distance [km]")
+        ax.set_ylabel("Vertical distance [km]")
+        ax.set_xlim(-10, max(x_coordinates) + 10)
+        ax.set_ylim(-10, max(y_coordinates) + 10)
+        for k, v in sources.iterrows():
+            ax.annotate(k, v)
+        fig.savefig("results.pdf", dpi=1200)
+        plt.show()

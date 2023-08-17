@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 
 # number of sources per side of region
-n = 4
+n = 2
 
 # generate region defined by distances between sources & sinks
 distances = network.region_generator(10, n, [1])
@@ -19,14 +19,14 @@ for idx in range(0, n * n):
     s_list.append("S_" + str(idx))
     for jdx in range(0, len(products)):
         if jdx == 0 or jdx == 1:
-            s_values.append(random.uniform(0, 1))
+            s_values.append(random.uniform(0, 100))
         else:
             s_values.append(0)
 s_values = np.array(s_values).reshape((n * n, len(products)))
 source_capacity = pd.DataFrame(s_values, columns=products, index=s_list)
 
 # specify demand of the product set [tons]
-demand = [0, 0, 0, 0, 8, 6]
+demand = [0, 0, 0, 0, 800, 600]
 
 # specify market price of the product set [euro/ton]
 market_price = {
