@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 
 # number of sources per side of region
-n = 5
+n = 4
 
 # generate region defined by distances between sources & sinks
 distances = network.region_generator(10, n, [1])
@@ -84,7 +84,7 @@ scenario.define_value_chain(
 scenario.model_value_chain()
 
 # solve the optimisation problem
-scenario.model.optimize()
+scenario.model.solveConcurrent()
 
 # process optimisation problem results
 scenario.process_results()
