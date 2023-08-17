@@ -86,5 +86,5 @@ scenario.model_value_chain()
 # solve the optimisation problem
 scenario.model.optimize()
 
-# print solution
-scenario.getOutput()
+# process optimisation problem results
+scenario.process_results()
