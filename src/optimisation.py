@@ -424,14 +424,15 @@ class Infrastructure:
 
         # access solution and print value for objective function (profit)
         self.OBJ = self.model.getObjVal()
-        print("\nObjective value (Profit) = {:.2f} euro/day".format(self.OBJ))
+        print("\n-------------------------------------------------------------")
+        print("Objective Value (Net Profit) = {:.2f} euro/day".format(self.OBJ))
 
         # process data related to installed CFs
         namelist_CF = []
-        print("\nCollection Facilities")
+        print("\n-------------------------------------------------------------")
+        print("Collection Facilities")
         for j in self.CF:
             if self.model.getVal(self.b[j]) > 0.5:
-                print("\n")
                 print("{} = {:.2f}".format(j, self.model.getVal(self.b[j])))
                 namelist_CF.append(j)
                 print(
@@ -475,18 +476,18 @@ class Infrastructure:
 
         # print out installed CFs
         print(
-            "\nTotal number of open collection facilities = {:.2f}".format(
+            "Total number of open collection facilities = {:.2f}".format(
                 sum(self.model.getVal(self.b[j]) for j in self.CF)
             )
         )
-        print("\nList of open collection facilities:", self.namelist_CF)
+        print("List of open collection facilities:", self.namelist_CF)
 
         # process data related to installed RTFs
         namelist_RTF = []
-        print("\nRecovery and Treatment Facilities")
+        print("\n-------------------------------------------------------------")
+        print("Recovery and Treatment Facilities")
         for k in self.RTF:
             if self.model.getVal(self.b[k]) > 0.5:
-                print("\n")
                 print("{} = {:.2f}".format(k, self.model.getVal(self.b[k])))
                 namelist_RTF.append(k)
                 print(
@@ -530,17 +531,18 @@ class Infrastructure:
 
         # print installed RTFs
         print(
-            "\nTotal number of open recovery and treatment facilities = {:.2f}".format(
+            "Total number of open recovery and treatment facilities = {:.2f}".format(
                 sum(self.model.getVal(self.b[k]) for k in self.RTF)
             )
         )
-        print("\nList of open recovery and treatment facilities:", self.namelist_RTF)
+        print("List of open recovery and treatment facilities:", self.namelist_RTF)
 
         # process data related to installed CPFs
         namelist_CPF = []
+        print("\n-------------------------------------------------------------")
+        print("Chemical Processing Facilities")
         for l in self.CPF:
             if self.model.getVal(self.b[l]) > 0.5:
-                print("\n")
                 print("{} = {:.2f}".format(l, self.model.getVal(self.b[l])))
                 namelist_CPF.append(l)
                 print(
@@ -584,17 +586,18 @@ class Infrastructure:
 
         # print installed CPFs
         print(
-            "\nTotal number of open chemical processing facilities = {:.2f}".format(
+            "Total number of open chemical processing facilities = {:.2f}".format(
                 sum(self.model.getVal(self.b[l]) for l in self.CPF)
             )
         )
-        print("\nList of open chemical processing facilities:", self.namelist_CPF)
+        print("List of open chemical processing facilities:", self.namelist_CPF)
 
         # process data related to installed DPFs
         namelist_DPF = []
+        print("\n-------------------------------------------------------------")
+        print("Downstream Processing Facilities")
         for m in self.DPF:
             if self.model.getVal(self.b[m]) > 0.5:
-                print("\n")
                 print("{} = {:.2f}".format(m, self.model.getVal(self.b[m])))
                 namelist_DPF.append(m)
                 print(
@@ -638,22 +641,23 @@ class Infrastructure:
 
         # print installed DPFs
         print(
-            "\nTotal number of open downstream processing facilities = {:.2f}".format(
+            "Total number of open downstream processing facilities = {:.2f}".format(
                 sum(self.model.getVal(self.b[m]) for m in self.DPF)
             )
         )
-        print("\nList of open downstream processing facilities:", self.namelist_DPF)
+        print("List of open downstream processing facilities:", self.namelist_DPF)
 
         # print demand satisfaction for all customers in the value chain
+        print("\n-------------------------------------------------------------")
+        print("Demand Satisfaction")
         demand_satisfaction = {}
-        print("\n")
         for p in self.P:
             for n in self.C:
                 demand_satisfaction[(p, n)] = sum(
                     self.model.getVal(self.x[p, m, n]) for m in self.DPF
                 )
                 print(
-                    "\nDemand Satisfaction of {} = {:.2f} ton/day {}".format(
+                    "Demand Satisfaction of {} = {:.2f} ton/day {}".format(
                         n, demand_satisfaction[(p, n)], p
                     )
                 )
@@ -661,10 +665,11 @@ class Infrastructure:
 
         # process specific components of the objective function, recall that
         # objective function = revenue - CAPEX - OPEX - transportation costs
-        print("\nObjective Function Breakdown:")
+        print("\n-------------------------------------------------------------")
+        print("Objective Function Breakdown")
 
         # print value chain revenue
-        print("\nRevenue:")
+        print("\nRevenue")
         self.Revenue = sum(
             sum(self.market_price[p] * self.demand_satisfaction[(p, n)] for n in self.C)
             for p in self.P
@@ -672,9 +677,23 @@ class Infrastructure:
         print("The total revenue is {:.2f} euro/day".format(self.Revenue))
 
         # print transportation costs of the value chain
-        print("\nTransportation Costs:")
-        # transportation costs between CF and RTF
+        print("\nTransportation Costs")
+        # transportation costs between S and CF
         self.transportation_cost_1 = sum(
+            2
+            * self.D1.loc[i, j]
+            * self.TC_PU
+            * sum(self.model.getVal(self.x[p, i, j]) for p in self.P)
+            for i in self.S
+            for j in self.CF
+        )
+        print(
+            "The transportation cost from Sources to Collection Facilities is {:.2f} euro/day".format(
+                self.transportation_cost_1
+            )
+        )
+        # transportation costs between CF and RTF
+        self.transportation_cost_2 = sum(
             2
             * self.D2.loc[j, k]
             * self.TC_PU
@@ -684,11 +703,11 @@ class Infrastructure:
         )
         print(
             "The transportation cost from Collection Facilities to Recovery and Treatment Facilities is {:.2f} euro/day".format(
-                self.transportation_cost_1
+                self.transportation_cost_2
             )
         )
         # transportation cost between RTF and CPF
-        self.transportation_cost_2 = sum(
+        self.transportation_cost_3 = sum(
             2
             * self.D3.loc[k, l]
             * self.TC_BRIQ
@@ -698,11 +717,11 @@ class Infrastructure:
         )
         print(
             "The transportation cost from Recovery and Treatment Facilities to Chemical Processing Facilities is {:.2f} euro/day".format(
-                self.transportation_cost_2
+                self.transportation_cost_3
             )
         )
         # transportation cost between CPF and DPF
-        self.transportation_cost_3 = sum(
+        self.transportation_cost_4 = sum(
             2
             * self.D4.loc[l, m]
             * self.TC_PO
@@ -712,11 +731,11 @@ class Infrastructure:
         )
         print(
             "The transportation cost from Chemical Processing Facilities to Downstream Processing Facilities is {:.2f} euro/day".format(
-                self.transportation_cost_3
+                self.transportation_cost_4
             )
         )
         # transportation cost between DPF and C
-        self.transportation_cost_4 = sum(
+        self.transportation_cost_5 = sum(
             2
             * self.D5.loc[m, n]
             * self.TC_ANL
@@ -726,12 +745,12 @@ class Infrastructure:
         )
         print(
             "The transportation cost from Downstream Processing Facilities to Customers is {:.2f} euro/day".format(
-                self.transportation_cost_4
+                self.transportation_cost_5
             )
         )
 
         # print CAPEX of the value chain per facility
-        print("\nCapital Expenditure (CAPEX):")
+        print("\nCapital Expenditure (CAPEX)")
         self.capex_CF = sum(
             self.fixed_CF * self.model.getVal(self.b[j]) for j in self.CF
         )
@@ -750,7 +769,7 @@ class Infrastructure:
         print("CAPEX of DPFs is {:.2f} euro/day".format(self.capex_DPF))
 
         # print OPEX of the value chain per facility
-        print("\nOperating Cost (OPEX):")
+        print("\nOperating Cost (OPEX)")
         self.opex_CF = sum(
             self.variable_CF
             * sum(self.model.getVal(self.x[p, i, j]) for i in self.S for p in self.P)
