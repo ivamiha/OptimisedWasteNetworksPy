@@ -1,6 +1,9 @@
 import pyscipopt as scip
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.offsetbox as osb
+import re
+import math
 
 
 class Infrastructure:
@@ -429,14 +432,19 @@ class Infrastructure:
         print("\n-------------------------------------------------------------")
         print("Objective Value (Net Profit) = {:.2f} euro/day".format(self.OBJ))
 
+        # create empty DataFrame ``product_flow`` to which data regarding the
+        # flow of products between facilities will be written
+        columns = ["Origin", "Destination", "Product", "Amount"]
+        self.product_flow = pd.DataFrame(columns=columns)
+
         # process data related to installed CFs
-        namelist_CF = []
+        name_list_CF = []
         print("\n-------------------------------------------------------------")
         print("Collection Facilities")
         for j in self.CF:
             if self.model.getVal(self.b[j]) > 0.5:
                 print("{} = {:.2f}".format(j, self.model.getVal(self.b[j])))
-                namelist_CF.append(j)
+                name_list_CF.append(j)
                 print(
                     "Total inflow to {} is {:.2f}".format(
                         j,
@@ -462,19 +470,17 @@ class Infrastructure:
             for p in self.P:
                 for i in self.S:
                     if self.model.getVal(self.x[p, i, j]) > 0.001:
-                        print(
-                            "{} to {} = {:.2f} ton/day of {}".format(
-                                i, j, self.model.getVal(self.x[p, i, j]), p
-                            )
+                        # append flow data from i to j to DataFrame
+                        new_data = {
+                            "Origin": i,
+                            "Destination": j,
+                            "Product": p,
+                            "Amount": self.model.getVal(self.x[p, i, j]),
+                        }
+                        self.product_flow = self.product_flow._append(
+                            new_data, ignore_index=True
                         )
-                for k in self.RTF:
-                    if self.model.getVal(self.x[p, j, k]) > 0.001:
-                        print(
-                            "{} to {} = {:.2f} ton/day of {}".format(
-                                j, k, self.model.getVal(self.x[p, j, k]), p
-                            )
-                        )
-        self.namelist_CF = namelist_CF
+        self.name_list_CF = name_list_CF
 
         # print out installed CFs
         print(
@@ -482,16 +488,16 @@ class Infrastructure:
                 sum(self.model.getVal(self.b[j]) for j in self.CF)
             )
         )
-        print("List of open collection facilities:", self.namelist_CF)
+        print("List of open collection facilities:", self.name_list_CF)
 
         # process data related to installed RTFs
-        namelist_RTF = []
+        name_list_RTF = []
         print("\n-------------------------------------------------------------")
         print("Recovery and Treatment Facilities")
         for k in self.RTF:
             if self.model.getVal(self.b[k]) > 0.5:
                 print("{} = {:.2f}".format(k, self.model.getVal(self.b[k])))
-                namelist_RTF.append(k)
+                name_list_RTF.append(k)
                 print(
                     "Total inflow to {} is {:.2f}".format(
                         k,
@@ -517,19 +523,17 @@ class Infrastructure:
             for p in self.P:
                 for j in self.CF:
                     if self.model.getVal(self.x[p, j, k]) > 0.001:
-                        print(
-                            "{} to {} = {:.2f} ton/day of {} material".format(
-                                j, k, self.model.getVal(self.x[p, j, k]), p
-                            )
+                        # append flow data from j to k to DataFrame
+                        new_data = {
+                            "Origin": j,
+                            "Destination": k,
+                            "Product": p,
+                            "Amount": self.model.getVal(self.x[p, j, k]),
+                        }
+                        self.product_flow = self.product_flow._append(
+                            new_data, ignore_index=True
                         )
-                for l in self.CPF:
-                    if self.model.getVal(self.x[p, k, l]) > 0.001:
-                        print(
-                            "{} to {} = {:.2f} ton/day of {} material".format(
-                                k, l, self.model.getVal(self.x[p, k, l]), p
-                            )
-                        )
-        self.namelist_RTF = namelist_RTF
+        self.name_list_RTF = name_list_RTF
 
         # print installed RTFs
         print(
@@ -537,16 +541,16 @@ class Infrastructure:
                 sum(self.model.getVal(self.b[k]) for k in self.RTF)
             )
         )
-        print("List of open recovery and treatment facilities:", self.namelist_RTF)
+        print("List of open recovery and treatment facilities:", self.name_list_RTF)
 
         # process data related to installed CPFs
-        namelist_CPF = []
+        name_list_CPF = []
         print("\n-------------------------------------------------------------")
         print("Chemical Processing Facilities")
         for l in self.CPF:
             if self.model.getVal(self.b[l]) > 0.5:
                 print("{} = {:.2f}".format(l, self.model.getVal(self.b[l])))
-                namelist_CPF.append(l)
+                name_list_CPF.append(l)
                 print(
                     "Total inflow to {} is {:.2f}".format(
                         l,
@@ -572,19 +576,17 @@ class Infrastructure:
             for p in self.P:
                 for k in self.RTF:
                     if self.model.getVal(self.x[p, k, l]) > 0.001:
-                        print(
-                            "{} to {} = {:.2f} ton/day of {}".format(
-                                k, l, self.model.getVal(self.x[p, k, l]), p
-                            )
+                        # append flow data from k to l to DataFrame
+                        new_data = {
+                            "Origin": k,
+                            "Destination": l,
+                            "Product": p,
+                            "Amount": self.model.getVal(self.x[p, k, l]),
+                        }
+                        self.product_flow = self.product_flow._append(
+                            new_data, ignore_index=True
                         )
-                for m in self.DPF:
-                    if self.model.getVal(self.x[p, l, m]) > 0.001:
-                        print(
-                            "{} to {} = {:.2f} ton/day of {}".format(
-                                l, m, self.model.getVal(self.x[p, l, m]), p
-                            )
-                        )
-        self.namelist_CPF = namelist_CPF
+        self.name_list_CPF = name_list_CPF
 
         # print installed CPFs
         print(
@@ -592,16 +594,16 @@ class Infrastructure:
                 sum(self.model.getVal(self.b[l]) for l in self.CPF)
             )
         )
-        print("List of open chemical processing facilities:", self.namelist_CPF)
+        print("List of open chemical processing facilities:", self.name_list_CPF)
 
         # process data related to installed DPFs
-        namelist_DPF = []
+        name_list_DPF = []
         print("\n-------------------------------------------------------------")
         print("Downstream Processing Facilities")
         for m in self.DPF:
             if self.model.getVal(self.b[m]) > 0.5:
                 print("{} = {:.2f}".format(m, self.model.getVal(self.b[m])))
-                namelist_DPF.append(m)
+                name_list_DPF.append(m)
                 print(
                     "Total inflow to {} is {:.2f}".format(
                         m,
@@ -627,19 +629,29 @@ class Infrastructure:
             for p in self.P:
                 for l in self.CPF:
                     if self.model.getVal(self.x[p, l, m]) > 0.001:
-                        print(
-                            "{} to {} = {:.2f} ton/day of {}".format(
-                                l, m, self.model.getVal(self.x[p, l, m]), p
-                            )
+                        # append flow data from l to m to DataFrame
+                        new_data = {
+                            "Origin": l,
+                            "Destination": m,
+                            "Product": p,
+                            "Amount": self.model.getVal(self.x[p, l, m]),
+                        }
+                        self.product_flow = self.product_flow._append(
+                            new_data, ignore_index=True
                         )
                 for n in self.C:
                     if self.model.getVal(self.x[p, m, n]) > 0.001:
-                        print(
-                            "{} to {} = {:.2f} ton/day of {}".format(
-                                m, n, self.model.getVal(self.x[p, m, n]), p
-                            )
+                        # append flow data from m to n to DataFrame
+                        new_data = {
+                            "Origin": m,
+                            "Destination": n,
+                            "Product": p,
+                            "Amount": self.model.getVal(self.x[p, m, n]),
+                        }
+                        self.product_flow = self.product_flow._append(
+                            new_data, ignore_index=True
                         )
-        self.namelist_DPF = namelist_DPF
+        self.name_list_DPF = name_list_DPF
 
         # print installed DPFs
         print(
@@ -647,7 +659,7 @@ class Infrastructure:
                 sum(self.model.getVal(self.b[m]) for m in self.DPF)
             )
         )
-        print("List of open downstream processing facilities:", self.namelist_DPF)
+        print("List of open downstream processing facilities:", self.name_list_DPF)
 
         # print demand satisfaction for all customers in the value chain
         print("\n-------------------------------------------------------------")
@@ -797,12 +809,36 @@ class Infrastructure:
         print("OPEX of CPFs is {:.2f} euro/day".format(self.opex_CPF))
         print("OPEX of DPFs is {:.2f} euro/day".format(self.opex_DPF))
 
+        # save the ``self.product_flow`` DataFrame to a csv file
+        self.product_flow.to_csv("product_flows.csv")
+
+    def plot_resulting_infrastructure(self):
+        """
+        Create plot where the nodes are plotted as a scatter plot with the size
+        of the node corresponding to the amount of waste sourced from it. The
+        installed facilities (and the presence or lack of customers) is then
+        indicated by icons which are used to annotate nodes on the plot.
+
+        Notes
+        -----
+        This is a good way for visually inspecting and checking smaller
+        networks.
+        """
         # convert source_cap DataFrame to list containing row sums
         source_cap_row_sums = self.source_cap.sum(axis=1).to_list()
         # extract source coordinates to list
         sources = pd.read_csv("coordinates_sources.csv")
         x_coordinates = sources["xcord"].to_list()
         y_coordinates = sources["ycord"].to_list()
+        # extract customer coordinates list
+        customers = pd.read_csv("coordinates_customers.csv")
+        x_coordinates_c = customers["xcord"].to_list()
+        y_coordinates_c = customers["ycord"].to_list()
+        # convert name_list of installed facilities into an int_list
+        int_list_CF = name_list_to_int_list(self.name_list_CF)
+        int_list_RTF = name_list_to_int_list(self.name_list_RTF)
+        int_list_CPF = name_list_to_int_list(self.name_list_CPF)
+        int_list_DPF = name_list_to_int_list(self.name_list_DPF)
         # use source row sums to create scatter plot with scaled source size
         fig, ax = plt.subplots()
         ax.scatter(x_coordinates, y_coordinates, c="k", s=source_cap_row_sums)
@@ -810,7 +846,88 @@ class Infrastructure:
         ax.set_ylabel("Vertical distance [km]")
         ax.set_xlim(-10, max(x_coordinates) + 10)
         ax.set_ylim(-10, max(y_coordinates) + 10)
-        for k, v in sources.iterrows():
-            ax.annotate(k, v)
+        # chosen offset for annotation from the node
+        offset = 25
+        # annotate nodes where CFs have been installed
+        imagebox = osb.OffsetImage(plt.imread("icons/OCF.png"), zoom=0.03)
+        for value in int_list_CF:
+            ab = osb.AnnotationBbox(
+                imagebox,
+                xy=(x_coordinates[value], y_coordinates[value]),
+                xybox=(-offset, 0),
+                frameon=False,
+                boxcoords="offset points",
+            )
+            plt.gca().add_artist(ab)
+        # annotate nodes where RTFs have been installed
+        imagebox = osb.OffsetImage(plt.imread("icons/MPF.png"), zoom=0.03)
+        for value in int_list_RTF:
+            ab = osb.AnnotationBbox(
+                imagebox,
+                xy=(x_coordinates[value], y_coordinates[value]),
+                xybox=(-offset * math.sqrt(2) / 2, offset * math.sqrt(2) / 2),
+                frameon=False,
+                boxcoords="offset points",
+            )
+            plt.gca().add_artist(ab)
+        # annnotate nodes where CPFs have been installed
+        imagebox = osb.OffsetImage(plt.imread("icons/CPF.png"), zoom=0.03)
+        for value in int_list_CPF:
+            ab = osb.AnnotationBbox(
+                imagebox,
+                xy=(x_coordinates[value], y_coordinates[value]),
+                xybox=(0, offset),
+                frameon=False,
+                boxcoords="offset points",
+            )
+            plt.gca().add_artist(ab)
+        # annotate nodes where DPFs have been installed
+        imagebox = osb.OffsetImage(plt.imread("icons/DPF.png"), zoom=0.03)
+        for value in int_list_DPF:
+            ab = osb.AnnotationBbox(
+                imagebox,
+                xy=(x_coordinates[value], y_coordinates[value]),
+                xybox=(offset * math.sqrt(2) / 2, offset * math.sqrt(2) / 2),
+                frameon=False,
+                boxcoords="offset points",
+            )
+            plt.gca().add_artist(ab)
+        # annotate nodes where customers are located
+        imagebox = osb.OffsetImage(plt.imread("icons/C.png"), zoom=0.03)
+        for idx in range(0, len(x_coordinates_c)):
+            ab = osb.AnnotationBbox(
+                imagebox,
+                xy=(x_coordinates_c[idx], y_coordinates_c[idx]),
+                xybox=(offset, 0),
+                frameon=False,
+                boxcoords="offset points",
+            )
+            plt.gca().add_artist(ab)
+        # plot and save the figure
         fig.savefig("results.pdf", dpi=1200)
         plt.show()
+
+
+@staticmethod
+def name_list_to_int_list(name_list):
+    """
+    Use regular expressions to convert strings representing names of facilities
+    that were installed within ``name_list`` into a list of only the integers
+    contained in those same strings.
+
+    Parameters
+    ----------
+    name_list (list): list of strings representing installed facilities
+
+    Returns
+    -------
+    int_list (list): list containing only integers in the provided strings
+    """
+
+    # use regular expressions to extract only the numbers in the strings
+    int_list = []
+    for name in name_list:
+        integer = int(re.search(r"\d+", name).group())
+        int_list.append(integer)
+
+    return int_list

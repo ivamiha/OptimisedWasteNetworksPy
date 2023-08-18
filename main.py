@@ -5,10 +5,10 @@ import numpy as np
 import pandas as pd
 
 # number of sources per side of region
-n = 2
+n = 3
 
 # generate region defined by distances between sources & sinks
-distances = network.region_generator(10, n, [1])
+distances = network.region_generator(100, n, [1, 6])
 
 # specify product set for the value chain
 products = ["Type1", "Type2", "Briq", "pyrOil", "ANL", "P-TOL"]
@@ -26,7 +26,7 @@ s_values = np.array(s_values).reshape((n * n, len(products)))
 source_capacity = pd.DataFrame(s_values, columns=products, index=s_list)
 
 # specify demand of the product set [tons]
-demand = [0, 0, 0, 0, 800, 600]
+demand = [0, 0, 0, 0, 800000, 600000]
 
 # specify market price of the product set [euro/ton]
 market_price = {
@@ -88,3 +88,6 @@ scenario.model.solveConcurrent()
 
 # process optimisation problem results
 scenario.process_results()
+
+# plot resulting infrastructure
+scenario.plot_resulting_infrastructure()
