@@ -844,10 +844,10 @@ class Infrastructure:
         ax.scatter(x_coordinates, y_coordinates, c="k", s=source_cap_row_sums)
         ax.set_xlabel("Horizontal distance [km]")
         ax.set_ylabel("Vertical distance [km]")
-        ax.set_xlim(-10, max(x_coordinates) + 10)
-        ax.set_ylim(-10, max(y_coordinates) + 10)
+        ax.set_xlim(-max(x_coordinates) * 0.3, max(x_coordinates) * 1.3)
+        ax.set_ylim(-max(y_coordinates) * 0.3, max(y_coordinates) * 1.3)
         # chosen offset for annotation from the node
-        offset = 25
+        offset = max(25, self.source_cap.values.max() / 30)
         # annotate nodes where CFs have been installed
         imagebox = osb.OffsetImage(plt.imread("icons/OCF.png"), zoom=0.03)
         for value in int_list_CF:
@@ -906,6 +906,11 @@ class Infrastructure:
         # plot and save the figure
         fig.savefig("results.pdf", dpi=1200)
         plt.show()
+
+    def plot_resulting_product_flow(self):
+        """
+        Explain
+        """
 
 
 @staticmethod

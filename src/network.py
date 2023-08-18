@@ -66,23 +66,25 @@ def region_generator(length, n, customers_list):
     customers.to_csv("coordinates_customers.csv", float_format="%.3f")
 
     # plot resulting fictional region
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 18))
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 8))
     # plot sources in the fictional region
     sources.plot(ax=ax1, kind="scatter", x="xcord", y="ycord", color="k")
     ax1.set_xlabel("Horizontal distance [km]")
     ax1.set_ylabel("Vertical distance [km]")
-    ax1.set_xlim(-10, length + 10)
-    ax1.set_ylim(-10, length + 10)
+    ax1.set_xlim(-length * 0.3, length * 1.3)
+    ax1.set_ylim(-length * 0.3, length * 1.3)
+    ax1.set_title("Source location")
     for k, v in sources.iterrows():
-        ax1.annotate(k, v)
+        ax1.annotate(k, v, textcoords="offset points", xytext=(0, 10), ha="center")
     # plot customers in fictional region
     customers.plot(ax=ax2, kind="scatter", x="xcord", y="ycord", color="b")
     ax2.set_xlabel("Horizontal distance [km]")
     ax2.set_ylabel("Vertical distance [km]")
-    ax2.set_xlim(-10, length + 10)
-    ax2.set_ylim(-10, length + 10)
+    ax2.set_xlim(-length * 0.3, length * 1.3)
+    ax2.set_ylim(-length * 0.3, length * 1.3)
+    ax2.set_title("Customer location")
     for k, v in customers.iterrows():
-        ax2.annotate(k, v)
+        ax2.annotate(k, v, textcoords="offset points", xytext=(0, 10), ha="center")
     # save as vector graphics and show to user
     fig.savefig("sources_and_sinks.pdf", dpi=1200)
     plt.show()
