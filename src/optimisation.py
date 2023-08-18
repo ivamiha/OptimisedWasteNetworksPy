@@ -639,6 +639,9 @@ class Infrastructure:
                         self.product_flow = self.product_flow._append(
                             new_data, ignore_index=True
                         )
+
+        for m in self.DPF:
+            for p in self.P:
                 for n in self.C:
                     if self.model.getVal(self.x[p, m, n]) > 0.001:
                         # append flow data from m to n to DataFrame
