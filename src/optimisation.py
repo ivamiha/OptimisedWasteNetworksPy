@@ -840,7 +840,7 @@ class Infrastructure:
         int_list_CPF = name_list_to_int_list(self.name_list_CPF)
         int_list_DPF = name_list_to_int_list(self.name_list_DPF)
         # use source row sums to create scatter plot with scaled source size
-        fig, ax = plt.subplots()
+        fig, ax = plt.subplots(figsize=(8, 8))
         ax.scatter(x_coordinates, y_coordinates, c="k", s=source_cap_row_sums)
         ax.set_xlabel("Horizontal distance [km]")
         ax.set_ylabel("Vertical distance [km]")
@@ -911,6 +911,8 @@ class Infrastructure:
         """
         Explain
         """
+
+        print(self.product_flow)
 
 
 @staticmethod
