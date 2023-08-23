@@ -2,6 +2,8 @@ import pyscipopt as scip
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.offsetbox as osb
+import matplotlib.lines as mlines
+import matplotlib.patches as mpatches
 import re
 import math
 
@@ -827,6 +829,7 @@ class Infrastructure:
         This is a good way for visually inspecting and checking smaller
         networks.
         """
+
         # convert source_cap DataFrame to list containing row sums
         source_cap_row_sums = self.source_cap.sum(axis=1).to_list()
         # extract source coordinates to list
@@ -907,23 +910,183 @@ class Infrastructure:
             )
             plt.gca().add_artist(ab)
         # plot and save the figure
-        fig.savefig("results.pdf", dpi=1200)
+        fig.savefig("results_infrastructure.pdf", dpi=1200)
         plt.show()
 
     def plot_resulting_product_flow(self):
         """
-        Explain
+        Create a plot where product flows are plotted between nodes represented
+        by a scatter plot. The nodes of the scatter plot are scaled according to
+        the amount of waste available at them. The amount of product exchanged
+        between nodes is represented by the width of the line connecting them.
+        The lines and nodes are colour and shape coded according to the
+        facilities installed at the node and the type of material being
+        transported.
+
+        Notes
+        -----
+        This is a good way for visually inspecting and checking larger networks.
         """
 
-        print(self.product_flow)
+        # define colour scheme used throughout using hex notation
+        # colours correspond to: yellow, orange, red, purple, indigo
+        colours = ["#fff3ad", "#f7ac78", "#dc636e", "#9e2a7d", "#002287"]
+
+        # convert source_cap DataFrame to list containing row sums
+        source_cap_row_sums = self.source_cap.sum(axis=1).to_list()
+        # extract source coordinates to list
+        sources = pd.read_csv("coordinates_sources.csv")
+        x_coordinates = sources["xcord"].to_list()
+        y_coordinates = sources["ycord"].to_list()
+        # create the figure and define axis labels and limits
+        fig, ax = plt.subplots(figsize=(8, 8))
+        ax.set_xlabel("Horizontal distance [km]")
+        ax.set_ylabel("Vertical distance [km]")
+        ax.set_xlim(-max(x_coordinates) * 0.3, max(x_coordinates) * 1.3)
+        ax.set_ylim(-max(y_coordinates) * 0.3, max(y_coordinates) * 1.3)
+        # draw lines representing exchanged products
+        product_flows = pd.read_csv("product_flows.csv")
+        for _, row in product_flows.iterrows():
+            origin_int = name_to_int(row["Origin"])
+            destination_int = name_to_int(row["Destination"])
+            # draw line only if origin and destination have different node num.
+            if origin_int != destination_int:
+                # do not plot if product is not PC, PO, or PS
+                if (
+                    row["Product"] != "Briq"
+                    and row["Product"] != "pyrOil"
+                    and row["Product"] != "ANL"
+                    and row["Product"] != "P-TOL"
+                ):
+                    break
+                # otherwise, plot with selected product flow colour
+                else:
+                    if row["Product"] == "Briq":
+                        colour = colours[2]
+                    elif row["Product"] == "pyrOil":
+                        colour = colours[3]
+                    elif row["Product"] == "ANL" or row["Product"] == "P-TOL":
+                        colour = colours[4]
+                    # draw the corresponding product flow line
+                    x = (x_coordinates[origin_int], x_coordinates[destination_int])
+                    y = (y_coordinates[origin_int], y_coordinates[destination_int])
+                    plt.plot(x, y, c=colour)
+        # convert name_list of installed facilities into an int_list
+        int_list_CF = name_list_to_int_list(self.name_list_CF)
+        int_list_RTF = name_list_to_int_list(self.name_list_RTF)
+        int_list_CPF = name_list_to_int_list(self.name_list_CPF)
+        int_list_DPF = name_list_to_int_list(self.name_list_DPF)
+        # loop over the source coordinates (that is, number of nodes)
+        for idx in range(0, len(x_coordinates)):
+            # do not plot if the node has no facilities installed
+            if (
+                idx not in int_list_DPF
+                and idx not in int_list_CPF
+                and idx not in int_list_RTF
+                and idx not in int_list_CF
+            ):
+                break
+            # otherwise, plot node with selected marker colour
+            else:
+                if idx in int_list_DPF:
+                    colour = colours[4]
+                elif idx in int_list_CPF:
+                    colour = colours[3]
+                elif idx in int_list_RTF:
+                    colour = colours[2]
+                elif idx in int_list_CF:
+                    colour = colours[1]
+                # plot the node
+                plt.scatter(
+                    x_coordinates[idx],
+                    y_coordinates[idx],
+                    c=colour,
+                    s=source_cap_row_sums[idx],
+                    zorder=2.5,
+                )
+        # create manual symbols for legend
+        point_OCF = mlines.Line2D(
+            [0],
+            [0],
+            label="at least OCF",
+            marker="o",
+            markersize=10,
+            markeredgecolor=colours[1],
+            markerfacecolor=colours[1],
+            linestyle="",
+        )
+        point_MPF = mlines.Line2D(
+            [0],
+            [0],
+            label="at least MPF",
+            marker="o",
+            markersize=10,
+            markeredgecolor=colours[2],
+            markerfacecolor=colours[2],
+            linestyle="",
+        )
+        point_CPF = mlines.Line2D(
+            [0],
+            [0],
+            label="at least CPF",
+            marker="o",
+            markersize=10,
+            markeredgecolor=colours[3],
+            markerfacecolor=colours[3],
+            linestyle="",
+        )
+        point_DPF = mlines.Line2D(
+            [0],
+            [0],
+            label="at least DPF",
+            marker="o",
+            markersize=10,
+            markeredgecolor=colours[4],
+            markerfacecolor=colours[4],
+            linestyle="",
+        )
+        line_PC = mlines.Line2D(
+            [0],
+            [0],
+            label="pre-concentrate flow",
+            c=colours[2],
+        )
+        line_PO = mlines.Line2D(
+            [0],
+            [0],
+            label="pyrolysis oil flow",
+            c=colours[3],
+        )
+        line_PS = mlines.Line2D(
+            [0],
+            [0],
+            label="polystyrene flow",
+            c=colours[4],
+        )
+        plt.legend(
+            handles=[
+                point_OCF,
+                point_MPF,
+                point_CPF,
+                point_DPF,
+                line_PC,
+                line_PO,
+                line_PS,
+            ],
+            loc="upper right",
+            ncol=2,
+            frameon=False,
+        )
+        fig.savefig("results_product_flow.pdf", dpi=1200)
+        plt.show()
 
 
 @staticmethod
 def name_list_to_int_list(name_list):
     """
-    Use regular expressions to convert strings representing names of facilities
-    that were installed within ``name_list`` into a list of only the integers
-    contained in those same strings.
+    Use regular expressions to extract list of integers from a list of strings
+    containing names of facilities that were installed, contained within
+    ``name_list``.
 
     Parameters
     ----------
@@ -941,3 +1104,23 @@ def name_list_to_int_list(name_list):
         int_list.append(integer)
 
     return int_list
+
+
+@staticmethod
+def name_to_int(name):
+    """
+    Use regular expressions to extract an integer from a string representing the
+    name of an installed facility contained within ``name``.
+
+    Parameters
+    ----------
+    name (string): string containing name of installed facility
+
+    Returns
+    -------
+    integer (int): integer extracted from string representing facility name
+    """
+
+    integer = int(re.search(r"\d+", name).group())
+
+    return integer

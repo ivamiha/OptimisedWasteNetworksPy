@@ -5,10 +5,10 @@ import numpy as np
 import pandas as pd
 
 # number of sources per side of region
-n = 3
+n = 4
 
 # generate region defined by distances between sources & sinks
-distances = network.region_generator(100, n, [1, 6])
+distances = network.region_generator(600, n, [1, 8, 14])
 
 # specify product set for the value chain
 products = ["Type1", "Type2", "Briq", "pyrOil", "ANL", "P-TOL"]
@@ -19,7 +19,7 @@ for idx in range(0, n * n):
     s_list.append("S_" + str(idx))
     for jdx in range(0, len(products)):
         if jdx == 0 or jdx == 1:
-            s_values.append(random.uniform(0, 100))
+            s_values.append(random.triangular(0, 250, 1000))
         else:
             s_values.append(0)
 s_values = np.array(s_values).reshape((n * n, len(products)))
@@ -91,3 +91,6 @@ scenario.process_results()
 
 # plot resulting infrastructure
 scenario.plot_resulting_infrastructure()
+
+# plot resulting product flow
+scenario.plot_resulting_product_flow()
