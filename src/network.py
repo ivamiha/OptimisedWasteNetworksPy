@@ -42,7 +42,7 @@ def region_generator(length, n, customers_list):
         i_list.append("S_" + str(idx))
         j_list.append("OCF_" + str(idx))
         k_list.append("MPF_" + str(idx))
-        l_list.append("PF_" + str(idx))
+        l_list.append("CPF_" + str(idx))
         m_list.append("DPF_" + str(idx))
     # do the same for all nodes containing customers
     n_list = []

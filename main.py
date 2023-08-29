@@ -5,70 +5,78 @@ import numpy as np
 import pandas as pd
 
 # number of sources per side of region
-n = 4
+n = 3
+
+# define nodes on which customers are located
+customers = [0, 4, 8]
 
 # generate region defined by distances between sources & sinks
-distances = network.region_generator(600, n, [1, 8, 14])
+distances = network.region_generator(25, n, customers)
 
 # specify product set for the value chain
-products = ["Type1", "Type2", "Briq", "pyrOil", "ANL", "P-TOL"]
+products = [
+    "ETICS",
+    "compressed_ETICS",
+    "pre_concentrate",
+    "pyrolysis_oil",
+    "styrene",
+]
+
+# set a seed for the random number generator
+seed_value = 1734176512
+random.seed(seed_value)
 
 # specify product capacity at sources [tons]
 s_list, s_values = [], []
 for idx in range(0, n * n):
     s_list.append("S_" + str(idx))
     for jdx in range(0, len(products)):
-        if jdx == 0 or jdx == 1:
-            s_values.append(random.triangular(0, 250, 1000))
+        if jdx == 0:
+            s_values.append(random.triangular(0, 20, 50))
         else:
             s_values.append(0)
 s_values = np.array(s_values).reshape((n * n, len(products)))
 source_capacity = pd.DataFrame(s_values, columns=products, index=s_list)
 
 # specify demand of the product set [tons]
-demand = [0, 0, 0, 0, 800000, 600000]
+demand = [0, 0, 0, 0, s_values.sum() / 20 / len(customers)]
+
 
 # specify market price of the product set [euro/ton]
 market_price = {
-    "Type1": 0,
-    "Type2": 0,
-    "Briq": 0,
-    "pyrOil": 0,
-    "ANL": 1495,
-    "P-TOL": 2400,
+    "ETICS": 0,
+    "compressed_ETICS": 0,
+    "pre_concentrate": 0,
+    "pyrolysis_oil": 0,
+    "styrene": 1650,
 }
 
 # specify yield factor of the different technologies
 yield_factor = {
-    ("Type1", "CF"): 0.95,
-    ("Type2", "CF"): 0.95,
-    ("Briq", "CF"): 0,
-    ("pyrOil", "CF"): 0,
-    ("ANL", "CF"): 0,
-    ("P-TOL", "CF"): 0,
-    ("Type1", "RTF"): 0,
-    ("Type2", "RTF"): 0,
-    ("Briq", "RTF"): 0.60,
-    ("pyrOil", "RTF"): 0,
-    ("ANL", "RTF"): 0,
-    ("P-TOL", "RTF"): 0,
-    ("Type1", "CPF"): 0,
-    ("Type2", "CPF"): 0,
-    ("Briq", "CPF"): 0,
-    ("pyrOil", "CPF"): 0.75,
-    ("ANL", "CPF"): 0,
-    ("P-TOL", "CPF"): 0,
-    ("Type1", "DPF"): 0,
-    ("Type2", "DPF"): 0,
-    ("Briq", "DPF"): 0,
-    ("pyrOil", "DPF"): 0,
-    ("ANL", "DPF"): 0.25,
-    ("P-TOL", "DPF"): 0.12,
+    ("ETICS", "OCF"): 0,
+    ("compressed_ETICS", "OCF"): 0.95,
+    ("pre_concentrate", "OCF"): 0,
+    ("pyrolysis_oil", "OCF"): 0,
+    ("styrene", "OCF"): 0,
+    ("ETICS", "MPF"): 0,
+    ("compressed_ETICS", "MPF"): 0,
+    ("pre_concentrate", "MPF"): 0.10,
+    ("pyrolysis_oil", "MPF"): 0,
+    ("styrene", "MPF"): 0,
+    ("ETICS", "CPF"): 0,
+    ("compressed_ETICS", "CPF"): 0,
+    ("pre_concentrate", "CPF"): 0,
+    ("pyrolysis_oil", "CPF"): 0.69,
+    ("styrene", "CPF"): 0,
+    ("ETICS", "DPF"): 0,
+    ("compressed_ETICS", "DPF"): 0,
+    ("pre_concentrate", "DPF"): 0,
+    ("pyrolysis_oil", "DPF"): 0,
+    ("styrene", "DPF"): 0.75,
 }
 
-# specify maximum facility capacities
-# facility_capacity = {"CF": 20, "RTF": 15, "CPF": 35, "DPF": 30}
-facility_capacity = {"CF": 2000, "RTF": 1500, "CPF": 3500, "DPF": 3000}
+# specify maximum facility capacities [tons/day]
+facility_capacity = {"OCF": 50, "MPF": 50, "CPF": 12, "DPF": 30}
 
 # initiate ``Infrastructure`` class based on distances from building network
 scenario = optimisation.Infrastructure(

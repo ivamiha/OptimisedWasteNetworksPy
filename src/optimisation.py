@@ -3,7 +3,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.offsetbox as osb
 import matplotlib.lines as mlines
-import matplotlib.patches as mpatches
 import re
 import math
 
@@ -19,6 +18,8 @@ class Infrastructure:
     max_volume = 99  # maximum volume for big roll-off [m^3]
     max_load_small = 6  # maximum load for small roll-off [tons]
     max_volume_small = 33  # maximum volume for small roll-off [m^3]
+    max_volume_small_tanker = 30  # maximum volume for small steel tanker [m^3]
+    max_volume_large_tanker = 45  # maximum volume for large steel tanker [m^3]
     fuel_cons = 0.4  # fuel consumption [lt/km]
     fuel_price = 1.79  # fuel price [euro/lt]
     toll_cost = 0.198  # toll cost [euro/km]
@@ -28,15 +29,16 @@ class Infrastructure:
     vehicle_cost = 30000 / (15 * 360 * 90 / 14)  # large roll-off [euro/h]
     vehicle_cost_small = 10000 / (15 * 360 * 90 / 14)  # small roll-off [euro/h]
     vehicle_cost_tanker = 50000 / (15 * 360 * 90 / 14)  # steel tanker [euro/h]
-    rho_PU = 0.045  # density of polyurethane [ton/m^3]
-    rho_BRIQ = 0.60  # density of briquette [ton/m^3]
-    rho_PO = 0.80  # density of pyrolysis oil [ton/m^3]
-    rho_ANL = 1.00  # density of aniline [ton/m^3]
+    rho_ETICS = 0.014  # density of ETICS [ton/m^3]
+    rho_compressed_ETICS = 0.14  # density of compressed ETICS [ton/m^3]
+    rho_pre_concentrate = 0.35  # density of pre-concentrate [ton/m^3]
+    rho_pyrolysis_oil = 0.80  # density of pyrolysis oil [ton/m^3]
+    rho_styrene = 0.910  # density of styrene [ton/m^3]
     max_time = 100  # maximum transportation between facilities [hours]
-    variable_CF = 15  # operational costs of CF [euro/ton]
-    variable_RTF = 46  # operational cost of RTF [euro/ton]
-    variable_CPF = 500  # operational cost of CPF [euro/ton]
-    variable_DPF = 500  # operational cost of DPF [euro/ton]
+    variable_OCF = 11  # operational costs of OCF [euro/ton]
+    variable_MPF = 46  # operational cost of MPF [euro/ton]
+    variable_CPF = 44  # operational cost of CPF [euro/ton]
+    variable_DPF = 100  # operational cost of DPF [euro/ton]
     period = 10  # loan period [years]
     rate = 0.1
 
@@ -47,11 +49,11 @@ class Infrastructure:
 
         Parameters
         ----------
-        D1 (DataFrame): distance matrix for S to CF
+        D1 (DataFrame): distance matrix for S to OCF
 
-        D2 (DataFrame): distance matrix for CF to RTF
+        D2 (DataFrame): distance matrix for OCF to MPF
 
-        D3 (DataFrame): distance matrix for RTF to CPF
+        D3 (DataFrame): distance matrix for MPF to CPF
 
         D4 (DataFrame): distance matrix for CPF to DPF
 
@@ -62,7 +64,7 @@ class Infrastructure:
         User should be careful in naming facilities. Identical names cannot be
         used to name different facilities at the same location. For example, a
         source and collection facility in Cologne should have different names:
-        S_Cologne and CF_Cologne, for example.
+        S_Cologne and OCF_Cologne, for example.
         """
 
         # initialise instance variables for distance matrices
@@ -73,8 +75,8 @@ class Infrastructure:
         self.D5 = D5
         # initialise instance variables for sources, customers & facilities
         self.S = D1.index.tolist()
-        self.CF = D1.columns.tolist()
-        self.RTF = D3.index.tolist()
+        self.OCF = D1.columns.tolist()
+        self.MPF = D3.index.tolist()
         self.CPF = D3.columns.tolist()
         self.DPF = D5.index.tolist()
         self.C = D5.columns.tolist()
@@ -124,10 +126,6 @@ class Infrastructure:
             for p in self.P:
                 key_list_C.append((p, n))
         self.key_list_C = key_list_C
-        # NOTE: previously done as follows, in case encounter downstream probs
-        # for p in self.P:
-        #    for n in self.C:
-        #        key_list_C.append((p, n))
 
         # generate instance dict that uses ``self.key_list_C`` as keys and
         # ``demand`` as values
@@ -141,17 +139,17 @@ class Infrastructure:
         self.D = D
 
         # calculate total capital invesment cost wrt capacity [euro]
-        self.TCI_CF = 1.45 * ((self.facility_cap["CF"] / 100) ** 0.6) * (10**6)
-        self.TCI_RTF = 2.88 * ((self.facility_cap["RTF"] / 100) ** 0.6) * (10**6)
-        self.TCI_CPF = 100 * ((self.facility_cap["CPF"] / 278) ** 0.6) * (10**6)
+        self.TCI_OCF = 0.057 * ((self.facility_cap["OCF"] / 0.384) ** 0.6) * (10**6)
+        self.TCI_MPF = 8 * ((self.facility_cap["MPF"] / 41.6) ** 0.6) * (10**6)
+        self.TCI_CPF = 20.2 * ((self.facility_cap["CPF"] / 110) ** 0.6) * (10**6)
         self.TCI_DPF = 250 * ((self.facility_cap["DPF"] / 278) ** 0.6) * (10**6)
 
         # calculate annualized capital investment cost per day [euro/day]
-        self.fixed_CF = (
-            self.rate * self.TCI_CF / (1 - (1 + self.rate) ** (-self.period)) / 360
+        self.fixed_OCF = (
+            self.rate * self.TCI_OCF / (1 - (1 + self.rate) ** (-self.period)) / 360
         )
-        self.fixed_RTF = (
-            self.rate * self.TCI_RTF / (1 - (1 + self.rate) ** (-self.period)) / 360
+        self.fixed_MPF = (
+            self.rate * self.TCI_MPF / (1 - (1 + self.rate) ** (-self.period)) / 360
         )
         self.fixed_CPF = (
             self.rate * self.TCI_CPF / (1 - (1 + self.rate) ** (-self.period)) / 360
@@ -161,37 +159,36 @@ class Infrastructure:
         )
 
         # calculate transportation costs [euro/(km*ton)]
-        # NOTE: need to use function which actually tests whether load or
-        # volume are the limiting factor, not guessing as it currently is
-        self.time_penalty = (
-            (self.driver_wage / self.driver_hours + self.vehicle_cost_small)
-            / self.avg_speed
-            / (self.max_volume_small * self.rho_PU)
-        )
-        # assume volume is the limiting factor
-        self.TC_PU = (
+        # assume volume is the limiting factor for ETICS, large roll-off
+        self.TC_ETICS = (
             (self.fuel_price * self.fuel_cons + self.toll_cost)
             + (self.driver_wage / self.driver_hours + self.vehicle_cost)
             / self.avg_speed
-        ) / (self.max_volume * self.rho_PU)
-        # assume load is limiting factor
-        self.TC_BRIQ = (
+        ) / (self.max_volume * self.rho_ETICS)
+        # assume load is limiting factor for compressed ETICS, large roll-off
+        self.TC_comp_ETICS = (
             (self.fuel_price * self.fuel_cons + self.toll_cost)
             + (self.driver_wage / self.driver_hours + self.vehicle_cost)
             / self.avg_speed
         ) / self.max_load
-        # assume load is limiting factor, using 30 m^3 tanker
-        self.TC_PO = (
+        # assume load is limiting factor for pre-concentrate, large roll-off
+        self.TC_pre_concentrate = (
             (self.fuel_price * self.fuel_cons + self.toll_cost)
             + (self.driver_wage / self.driver_hours + self.vehicle_cost_tanker)
             / self.avg_speed
-        ) / (self.rho_PO * 30)
-        # assume load is limiting factor, using 45 m^3 tanker
-        self.TC_ANL = (
+        ) / self.max_load
+        # assume volume is limiting factor pyrolysis oil, using large tanker
+        self.TC_pyrolysis_oil = (
             (self.fuel_price * self.fuel_cons + self.toll_cost)
             + (self.driver_wage / self.driver_hours + self.vehicle_cost_tanker)
             / self.avg_speed
-        ) / (self.rho_ANL * 45)
+        ) / (self.max_volume_large_tanker * self.rho_pyrolysis_oil)
+        # assume volume is limiting factor for styrene, using large tanker
+        self.TC_styrene = (
+            (self.fuel_price * self.fuel_cons + self.toll_cost)
+            + (self.driver_wage / self.driver_hours + self.vehicle_cost)
+            / self.avg_speed
+        ) / (self.max_volume_large_tanker * self.rho_styrene)
 
     def model_value_chain(self):
         """
@@ -207,24 +204,24 @@ class Infrastructure:
         x = {}  # continuous variable, represents material flows
 
         # add solution variables to the optimisation problem
-        # product flows from S to CF
+        # product flows from S to OCF
         for p in self.P:
             for i in self.S:
-                for j in self.CF:
+                for j in self.OCF:
                     # Source > Collection Facility
                     x[p, i, j] = model.addVar(
                         vtype="CONTINUOUS", lb=0, name="x(%s,%s,%s)" % (p, i, j)
                     )
-        # product flows from CF to RTF
+        # product flows from OCF to MPF
         for p in self.P:
-            for j in self.CF:
-                for k in self.RTF:
+            for j in self.OCF:
+                for k in self.MPF:
                     x[p, j, k] = model.addVar(
                         vtype="CONTINUOUS", lb=0, name="x(%s,%s,%s)" % (p, j, k)
                     )
-        # product flows from RTF to CPF
+        # product flows from MPF to CPF
         for p in self.P:
-            for k in self.RTF:
+            for k in self.MPF:
                 for l in self.CPF:
                     x[p, k, l] = model.addVar(
                         vtype="CONTINUOUS", lb=0, name="x(%s,%s,%s)" % (p, k, l)
@@ -243,11 +240,11 @@ class Infrastructure:
                     x[p, m, n] = model.addVar(
                         vtype="CONTINUOUS", lb=0, name="x(%s,%s,%s)" % (p, m, n)
                     )
-        # CF installation binary outcomes
-        for j in self.CF:
+        # OCF installation binary outcomes
+        for j in self.OCF:
             b[j] = model.addVar(vtype="BINARY", name="b(%s)" % j)
-        # RTF installation binary outcomes
-        for k in self.RTF:
+        # MPF installation binary outcomes
+        for k in self.MPF:
             b[k] = model.addVar(vtype="BINARY", name="b(%s)" % k)
         # CPF installation binary outcomes
         for l in self.CPF:
@@ -260,39 +257,39 @@ class Infrastructure:
         for p in self.P:
             for i in self.S:
                 model.addCons(
-                    scip.quicksum(x[p, i, j] for j in self.CF)
+                    scip.quicksum(x[p, i, j] for j in self.OCF)
                     == self.source_cap.loc[i, p],
                     name="Conservation(%s,%s)" % (p, i),
                 )
 
         # add constraints for flow conservation at facilities to the model
         for p in self.P:
-            for j in self.CF:
-                # input PU, output PU
+            for j in self.OCF:
+                # input ETICS, output compressed ETICS
                 model.addCons(
-                    self.yield_factor[(p, "CF")]
-                    * scip.quicksum(x[p, i, j] for i in self.S)
-                    == scip.quicksum(x[p, j, k] for k in self.RTF),
+                    self.yield_factor[(p, "OCF")]
+                    * scip.quicksum(x[p, i, j] for i in self.S for p in self.PP)
+                    == scip.quicksum(x[p, j, k] for k in self.MPF),
                     name="Conservation(%s,%s)" % (p, j),
                 )
-            for k in self.RTF:
-                # input PU, output briquette
+            for k in self.MPF:
+                # input compressed ETICS, output pre-concentrate
                 model.addCons(
-                    self.yield_factor[(p, "RTF")]
-                    * scip.quicksum(x[p, j, k] for j in self.CF for p in self.PP)
+                    self.yield_factor[(p, "MPF")]
+                    * scip.quicksum(x[p, j, k] for j in self.OCF for p in self.PP)
                     == scip.quicksum(x[p, k, l] for l in self.CPF),
                     name="Conservation(%s,%s)" % (p, k),
                 )
             for l in self.CPF:
-                # input briquette, output pyrolysis oil
+                # input pre-concentrate, output pyrolysis oil
                 model.addCons(
                     self.yield_factor[(p, "CPF")]
-                    * scip.quicksum(x[p, k, l] for k in self.RTF for p in self.PP)
+                    * scip.quicksum(x[p, k, l] for k in self.MPF for p in self.PP)
                     == scip.quicksum(x[p, l, m] for m in self.DPF),
                     name="Conservation(%s,%s)" % (p, l),
                 )
             for m in self.DPF:
-                # input pyrolysis oil, output aniline & toluidine
+                # input pyrolysis oil, output styrene
                 model.addCons(
                     self.yield_factor[(p, "DPF")]
                     * scip.quicksum(x[p, l, m] for l in self.CPF for p in self.PP)
@@ -301,21 +298,21 @@ class Infrastructure:
                 )
 
         # add capacity constraint for the facilities to the model
-        for j in self.CF:
+        for j in self.OCF:
             model.addCons(
                 scip.quicksum(x[p, i, j] for i in self.S for p in self.P)
-                <= b[j] * self.facility_cap["CF"],
+                <= b[j] * self.facility_cap["OCF"],
                 name="Capacity(%s)" % j,
             )
-        for k in self.RTF:
+        for k in self.MPF:
             model.addCons(
-                scip.quicksum(x[p, j, k] for j in self.CF for p in self.P)
-                <= b[k] * self.facility_cap["RTF"],
+                scip.quicksum(x[p, j, k] for j in self.OCF for p in self.P)
+                <= b[k] * self.facility_cap["MPF"],
                 name="Capacity(%s)" % k,
             )
         for l in self.CPF:
             model.addCons(
-                scip.quicksum(x[p, k, l] for k in self.RTF for p in self.P)
+                scip.quicksum(x[p, k, l] for k in self.MPF for p in self.P)
                 <= b[l] * self.facility_cap["CPF"],
                 name="Capacity(%s)" % l,
             )
@@ -334,10 +331,10 @@ class Infrastructure:
                     name="Demand(%s,%s)" % (p, n),
                 )
 
-        # add driving time constraint for CFs to the model
+        # add driving time constraint for OCFs to the model
         # NOTE: this is a new constraint not mentioned in the paper
         for i in self.S:
-            for j in self.CF:
+            for j in self.OCF:
                 model.addCons(
                     scip.quicksum(x[p, i, j] for p in self.P) * self.D1.loc[i, j]
                     <= (scip.quicksum(x[p, i, j] for p in self.P))
@@ -354,25 +351,25 @@ class Infrastructure:
                 for p in self.P
             )
             - (
-                scip.quicksum(self.fixed_CF * b[j] for j in self.CF)
-                + scip.quicksum(self.fixed_RTF * b[k] for k in self.RTF)
+                scip.quicksum(self.fixed_OCF * b[j] for j in self.OCF)
+                + scip.quicksum(self.fixed_MPF * b[k] for k in self.MPF)
                 + scip.quicksum(self.fixed_CPF * b[l] for l in self.CPF)
                 + scip.quicksum(self.fixed_DPF * b[m] for m in self.DPF)
             )
             - (
                 scip.quicksum(
-                    self.variable_CF
+                    self.variable_OCF
                     * scip.quicksum(x[p, i, j] for i in self.S for p in self.P)
-                    for j in self.CF
+                    for j in self.OCF
                 )
                 + scip.quicksum(
-                    self.variable_RTF
-                    * scip.quicksum(x[p, j, k] for j in self.CF for p in self.P)
-                    for k in self.RTF
+                    self.variable_MPF
+                    * scip.quicksum(x[p, j, k] for j in self.OCF for p in self.P)
+                    for k in self.MPF
                 )
                 + scip.quicksum(
                     self.variable_CPF
-                    * scip.quicksum(x[p, k, l] for k in self.RTF for p in self.P)
+                    * scip.quicksum(x[p, k, l] for k in self.MPF for p in self.P)
                     for l in self.CPF
                 )
                 + scip.quicksum(
@@ -383,31 +380,31 @@ class Infrastructure:
             )
             - (
                 scip.quicksum(
-                    2 * self.D1.loc[i, j] * self.time_penalty * x[p, i, j]
+                    2 * self.D1.loc[i, j] * self.TC_ETICS * x[p, i, j]
                     for i in self.S
-                    for j in self.CF
+                    for j in self.OCF
                     for p in self.P
                 )
                 + scip.quicksum(
-                    2 * self.D2.loc[j, k] * self.TC_PU * x[p, j, k]
-                    for j in self.CF
-                    for k in self.RTF
+                    2 * self.D2.loc[j, k] * self.TC_comp_ETICS * x[p, j, k]
+                    for j in self.OCF
+                    for k in self.MPF
                     for p in self.P
                 )
                 + scip.quicksum(
-                    2 * self.D3.loc[k, l] * self.TC_BRIQ * x[p, k, l]
-                    for k in self.RTF
+                    2 * self.D3.loc[k, l] * self.TC_pre_concentrate * x[p, k, l]
+                    for k in self.MPF
                     for l in self.CPF
                     for p in self.P
                 )
                 + scip.quicksum(
-                    2 * self.D4.loc[l, m] * self.TC_PO * x[p, l, m]
+                    2 * self.D4.loc[l, m] * self.TC_pyrolysis_oil * x[p, l, m]
                     for l in self.CPF
                     for m in self.DPF
                     for p in self.P
                 )
                 + scip.quicksum(
-                    2 * self.D5.loc[m, n] * self.TC_ANL * x[p, m, n]
+                    2 * self.D5.loc[m, n] * self.TC_styrene * x[p, m, n]
                     for m in self.DPF
                     for n in self.C
                     for p in self.P
@@ -439,14 +436,14 @@ class Infrastructure:
         columns = ["Origin", "Destination", "Product", "Amount"]
         self.product_flow = pd.DataFrame(columns=columns)
 
-        # process data related to installed CFs
-        name_list_CF = []
+        # process data related to installed OCFs
+        name_list_OCF = []
         print("\n-------------------------------------------------------------")
-        print("Collection Facilities")
-        for j in self.CF:
+        print("Optional Compacting Facilities")
+        for j in self.OCF:
             if self.model.getVal(self.b[j]) > 0.5:
                 print("{} = {:.2f}".format(j, self.model.getVal(self.b[j])))
-                name_list_CF.append(j)
+                name_list_OCF.append(j)
                 print(
                     "Total inflow to {} is {:.2f}".format(
                         j,
@@ -465,7 +462,7 @@ class Infrastructure:
                             for i in self.S
                             for p in self.P
                         )
-                        / self.facility_cap["CF"]
+                        / self.facility_cap["OCF"]
                         * 100,
                     )
                 )
@@ -482,30 +479,30 @@ class Infrastructure:
                         self.product_flow = self.product_flow._append(
                             new_data, ignore_index=True
                         )
-        self.name_list_CF = name_list_CF
+        self.name_list_OCF = name_list_OCF
 
-        # print out installed CFs
+        # print out installed OCFs
         print(
-            "Total number of open collection facilities = {:.2f}".format(
-                sum(self.model.getVal(self.b[j]) for j in self.CF)
+            "Total number of optional compacting facilities = {:.2f}".format(
+                sum(self.model.getVal(self.b[j]) for j in self.OCF)
             )
         )
-        print("List of open collection facilities:", self.name_list_CF)
+        print("List of optional compacting facilities:", self.name_list_OCF)
 
-        # process data related to installed RTFs
-        name_list_RTF = []
+        # process data related to installed MPFs
+        name_list_MPF = []
         print("\n-------------------------------------------------------------")
-        print("Recovery and Treatment Facilities")
-        for k in self.RTF:
+        print("Mechanical Preprocessing Facilities")
+        for k in self.MPF:
             if self.model.getVal(self.b[k]) > 0.5:
                 print("{} = {:.2f}".format(k, self.model.getVal(self.b[k])))
-                name_list_RTF.append(k)
+                name_list_MPF.append(k)
                 print(
                     "Total inflow to {} is {:.2f}".format(
                         k,
                         sum(
                             self.model.getVal(self.x[p, j, k])
-                            for j in self.CF
+                            for j in self.OCF
                             for p in self.P
                         ),
                     )
@@ -515,15 +512,15 @@ class Infrastructure:
                         k,
                         sum(
                             self.model.getVal(self.x[p, j, k])
-                            for j in self.CF
+                            for j in self.OCF
                             for p in self.P
                         )
-                        / self.facility_cap["RTF"]
+                        / self.facility_cap["MPF"]
                         * 100,
                     )
                 )
             for p in self.P:
-                for j in self.CF:
+                for j in self.OCF:
                     if self.model.getVal(self.x[p, j, k]) > 0.001:
                         # append flow data from j to k to DataFrame
                         new_data = {
@@ -535,15 +532,15 @@ class Infrastructure:
                         self.product_flow = self.product_flow._append(
                             new_data, ignore_index=True
                         )
-        self.name_list_RTF = name_list_RTF
+        self.name_list_MPF = name_list_MPF
 
-        # print installed RTFs
+        # print installed MPFs
         print(
-            "Total number of open recovery and treatment facilities = {:.2f}".format(
-                sum(self.model.getVal(self.b[k]) for k in self.RTF)
+            "Total number of mechanical preprocessing facilities = {:.2f}".format(
+                sum(self.model.getVal(self.b[k]) for k in self.MPF)
             )
         )
-        print("List of open recovery and treatment facilities:", self.name_list_RTF)
+        print("List of mechanical preprocessing facilities:", self.name_list_MPF)
 
         # process data related to installed CPFs
         name_list_CPF = []
@@ -558,7 +555,7 @@ class Infrastructure:
                         l,
                         sum(
                             self.model.getVal(self.x[p, k, l])
-                            for k in self.RTF
+                            for k in self.MPF
                             for p in self.P
                         ),
                     )
@@ -568,7 +565,7 @@ class Infrastructure:
                         l,
                         sum(
                             self.model.getVal(self.x[p, k, l])
-                            for k in self.RTF
+                            for k in self.MPF
                             for p in self.P
                         )
                         / self.facility_cap["CPF"]
@@ -576,7 +573,7 @@ class Infrastructure:
                     )
                 )
             for p in self.P:
-                for k in self.RTF:
+                for k in self.MPF:
                     if self.model.getVal(self.x[p, k, l]) > 0.001:
                         # append flow data from k to l to DataFrame
                         new_data = {
@@ -592,11 +589,11 @@ class Infrastructure:
 
         # print installed CPFs
         print(
-            "Total number of open chemical processing facilities = {:.2f}".format(
+            "Total number of chemical processing facilities = {:.2f}".format(
                 sum(self.model.getVal(self.b[l]) for l in self.CPF)
             )
         )
-        print("List of open chemical processing facilities:", self.name_list_CPF)
+        print("List of chemical processing facilities:", self.name_list_CPF)
 
         # process data related to installed DPFs
         name_list_DPF = []
@@ -660,11 +657,11 @@ class Infrastructure:
 
         # print installed DPFs
         print(
-            "Total number of open downstream processing facilities = {:.2f}".format(
+            "Total number of downstream processing facilities = {:.2f}".format(
                 sum(self.model.getVal(self.b[m]) for m in self.DPF)
             )
         )
-        print("List of open downstream processing facilities:", self.name_list_DPF)
+        print("List of downstream processing facilities:", self.name_list_DPF)
 
         # print demand satisfaction for all customers in the value chain
         print("\n-------------------------------------------------------------")
@@ -697,45 +694,45 @@ class Infrastructure:
 
         # print transportation costs of the value chain
         print("\nTransportation Costs")
-        # transportation costs between S and CF
+        # transportation costs between S and OCF
         self.transportation_cost_1 = sum(
             2
             * self.D1.loc[i, j]
-            * self.TC_PU
+            * self.TC_ETICS
             * sum(self.model.getVal(self.x[p, i, j]) for p in self.P)
             for i in self.S
-            for j in self.CF
+            for j in self.OCF
         )
         print(
-            "The transportation cost from Sources to Collection Facilities is {:.2f} euro/day".format(
+            "The transportation cost from Sources to Optional Compacting Facilities is {:.2f} euro/day".format(
                 self.transportation_cost_1
             )
         )
-        # transportation costs between CF and RTF
+        # transportation costs between OCF and MPF
         self.transportation_cost_2 = sum(
             2
             * self.D2.loc[j, k]
-            * self.TC_PU
+            * self.TC_comp_ETICS
             * sum(self.model.getVal(self.x[p, j, k]) for p in self.P)
-            for j in self.CF
-            for k in self.RTF
+            for j in self.OCF
+            for k in self.MPF
         )
         print(
-            "The transportation cost from Collection Facilities to Recovery and Treatment Facilities is {:.2f} euro/day".format(
+            "The transportation cost from Optional Compacting Facilities to Mechanical Preprocessing Facilities is {:.2f} euro/day".format(
                 self.transportation_cost_2
             )
         )
-        # transportation cost between RTF and CPF
+        # transportation cost between MPF and CPF
         self.transportation_cost_3 = sum(
             2
             * self.D3.loc[k, l]
-            * self.TC_BRIQ
+            * self.TC_pre_concentrate
             * sum(self.model.getVal(self.x[p, k, l]) for p in self.P)
-            for k in self.RTF
+            for k in self.MPF
             for l in self.CPF
         )
         print(
-            "The transportation cost from Recovery and Treatment Facilities to Chemical Processing Facilities is {:.2f} euro/day".format(
+            "The transportation cost from Mechanical Preprocessing Facilities to Chemical Processing Facilities is {:.2f} euro/day".format(
                 self.transportation_cost_3
             )
         )
@@ -743,7 +740,7 @@ class Infrastructure:
         self.transportation_cost_4 = sum(
             2
             * self.D4.loc[l, m]
-            * self.TC_PO
+            * self.TC_pyrolysis_oil
             * sum(self.model.getVal(self.x[p, l, m]) for p in self.P)
             for l in self.CPF
             for m in self.DPF
@@ -757,7 +754,7 @@ class Infrastructure:
         self.transportation_cost_5 = sum(
             2
             * self.D5.loc[m, n]
-            * self.TC_ANL
+            * self.TC_styrene
             * sum(self.model.getVal(self.x[p, m, n]) for p in self.P)
             for m in self.DPF
             for n in self.C
@@ -770,11 +767,11 @@ class Infrastructure:
 
         # print CAPEX of the value chain per facility
         print("\nCapital Expenditure (CAPEX)")
-        self.capex_CF = sum(
-            self.fixed_CF * self.model.getVal(self.b[j]) for j in self.CF
+        self.capex_OCF = sum(
+            self.fixed_OCF * self.model.getVal(self.b[j]) for j in self.OCF
         )
-        self.capex_RTF = sum(
-            self.fixed_RTF * self.model.getVal(self.b[k]) for k in self.RTF
+        self.capex_MPF = sum(
+            self.fixed_MPF * self.model.getVal(self.b[k]) for k in self.MPF
         )
         self.capex_CPF = sum(
             self.fixed_CPF * self.model.getVal(self.b[l]) for l in self.CPF
@@ -782,26 +779,26 @@ class Infrastructure:
         self.capex_DPF = sum(
             self.fixed_DPF * self.model.getVal(self.b[m]) for m in self.DPF
         )
-        print("CAPEX of CFs is {:.2f} euro/day".format(self.capex_CF))
-        print("CAPEX of RTFs is {:.2f} euro/day".format(self.capex_RTF))
+        print("CAPEX of OCFs is {:.2f} euro/day".format(self.capex_OCF))
+        print("CAPEX of MPFs is {:.2f} euro/day".format(self.capex_MPF))
         print("CAPEX of CPFs is {:.2f} euro/day".format(self.capex_CPF))
         print("CAPEX of DPFs is {:.2f} euro/day".format(self.capex_DPF))
 
         # print OPEX of the value chain per facility
         print("\nOperating Cost (OPEX)")
-        self.opex_CF = sum(
-            self.variable_CF
+        self.opex_OCF = sum(
+            self.variable_OCF
             * sum(self.model.getVal(self.x[p, i, j]) for i in self.S for p in self.P)
-            for j in self.CF
+            for j in self.OCF
         )
-        self.opex_RTF = sum(
-            self.variable_RTF
-            * sum(self.model.getVal(self.x[p, j, k]) for j in self.CF for p in self.P)
-            for k in self.RTF
+        self.opex_MPF = sum(
+            self.variable_MPF
+            * sum(self.model.getVal(self.x[p, j, k]) for j in self.OCF for p in self.P)
+            for k in self.MPF
         )
         self.opex_CPF = sum(
             self.variable_CPF
-            * sum(self.model.getVal(self.x[p, k, l]) for k in self.RTF for p in self.P)
+            * sum(self.model.getVal(self.x[p, k, l]) for k in self.MPF for p in self.P)
             for l in self.CPF
         )
         self.opex_DPF = sum(
@@ -809,8 +806,8 @@ class Infrastructure:
             * sum(self.model.getVal(self.x[p, l, m]) for l in self.CPF for p in self.P)
             for m in self.DPF
         )
-        print("OPEX of CFs is {:.2f} euro/day".format(self.opex_CF))
-        print("OPEX of RTFs is {:.2f} euro/day".format(self.opex_RTF))
+        print("OPEX of OCFs is {:.2f} euro/day".format(self.opex_OCF))
+        print("OPEX of MPFs is {:.2f} euro/day".format(self.opex_MPF))
         print("OPEX of CPFs is {:.2f} euro/day".format(self.opex_CPF))
         print("OPEX of DPFs is {:.2f} euro/day".format(self.opex_DPF))
 
@@ -834,43 +831,45 @@ class Infrastructure:
         source_cap_row_sums = self.source_cap.sum(axis=1).to_list()
         # extract source coordinates to list
         sources = pd.read_csv("coordinates_sources.csv")
-        x_coordinates = sources["xcord"].to_list()
-        y_coordinates = sources["ycord"].to_list()
+        x_coords = sources["xcord"].to_list()
+        y_coords = sources["ycord"].to_list()
         # extract customer coordinates list
         customers = pd.read_csv("coordinates_customers.csv")
-        x_coordinates_c = customers["xcord"].to_list()
-        y_coordinates_c = customers["ycord"].to_list()
+        x_coords_c = customers["xcord"].to_list()
+        y_coords_c = customers["ycord"].to_list()
         # convert name_list of installed facilities into an int_list
-        int_list_CF = name_list_to_int_list(self.name_list_CF)
-        int_list_RTF = name_list_to_int_list(self.name_list_RTF)
+        int_list_OCF = name_list_to_int_list(self.name_list_OCF)
+        int_list_MPF = name_list_to_int_list(self.name_list_MPF)
         int_list_CPF = name_list_to_int_list(self.name_list_CPF)
         int_list_DPF = name_list_to_int_list(self.name_list_DPF)
         # use source row sums to create scatter plot with scaled source size
         fig, ax = plt.subplots(figsize=(8, 8))
-        ax.scatter(x_coordinates, y_coordinates, c="k", s=source_cap_row_sums)
+        factor = int(300 / max(source_cap_row_sums))
+        size = [factor * val for val in source_cap_row_sums]
+        ax.scatter(x_coords, y_coords, c="k", s=size)
         ax.set_xlabel("Horizontal distance [km]")
         ax.set_ylabel("Vertical distance [km]")
-        ax.set_xlim(-max(x_coordinates) * 0.3, max(x_coordinates) * 1.3)
-        ax.set_ylim(-max(y_coordinates) * 0.3, max(y_coordinates) * 1.3)
+        ax.set_xlim(-max(x_coords) * 0.3, max(x_coords) * 1.3)
+        ax.set_ylim(-max(y_coords) * 0.3, max(y_coords) * 1.3)
         # chosen offset for annotation from the node
         offset = max(25, self.source_cap.values.max() / 30)
-        # annotate nodes where CFs have been installed
+        # annotate nodes where OCFs have been installed
         imagebox = osb.OffsetImage(plt.imread("icons/OCF.png"), zoom=0.03)
-        for value in int_list_CF:
+        for value in int_list_OCF:
             ab = osb.AnnotationBbox(
                 imagebox,
-                xy=(x_coordinates[value], y_coordinates[value]),
+                xy=(x_coords[value], y_coords[value]),
                 xybox=(-offset, 0),
                 frameon=False,
                 boxcoords="offset points",
             )
             plt.gca().add_artist(ab)
-        # annotate nodes where RTFs have been installed
+        # annotate nodes where MPFs have been installed
         imagebox = osb.OffsetImage(plt.imread("icons/MPF.png"), zoom=0.03)
-        for value in int_list_RTF:
+        for value in int_list_MPF:
             ab = osb.AnnotationBbox(
                 imagebox,
-                xy=(x_coordinates[value], y_coordinates[value]),
+                xy=(x_coords[value], y_coords[value]),
                 xybox=(-offset * math.sqrt(2) / 2, offset * math.sqrt(2) / 2),
                 frameon=False,
                 boxcoords="offset points",
@@ -881,7 +880,7 @@ class Infrastructure:
         for value in int_list_CPF:
             ab = osb.AnnotationBbox(
                 imagebox,
-                xy=(x_coordinates[value], y_coordinates[value]),
+                xy=(x_coords[value], y_coords[value]),
                 xybox=(0, offset),
                 frameon=False,
                 boxcoords="offset points",
@@ -892,7 +891,7 @@ class Infrastructure:
         for value in int_list_DPF:
             ab = osb.AnnotationBbox(
                 imagebox,
-                xy=(x_coordinates[value], y_coordinates[value]),
+                xy=(x_coords[value], y_coords[value]),
                 xybox=(offset * math.sqrt(2) / 2, offset * math.sqrt(2) / 2),
                 frameon=False,
                 boxcoords="offset points",
@@ -900,10 +899,10 @@ class Infrastructure:
             plt.gca().add_artist(ab)
         # annotate nodes where customers are located
         imagebox = osb.OffsetImage(plt.imread("icons/C.png"), zoom=0.03)
-        for idx in range(0, len(x_coordinates_c)):
+        for idx in range(0, len(x_coords_c)):
             ab = osb.AnnotationBbox(
                 imagebox,
-                xy=(x_coordinates_c[idx], y_coordinates_c[idx]),
+                xy=(x_coords_c[idx], y_coords_c[idx]),
                 xybox=(offset, 0),
                 frameon=False,
                 boxcoords="offset points",
@@ -930,20 +929,21 @@ class Infrastructure:
 
         # define colour scheme used throughout using hex notation
         # colours correspond to: yellow, orange, red, purple, indigo
-        colours = ["#fff3ad", "#f7ac78", "#dc636e", "#9e2a7d", "#002287"]
+        # colours = ["#fff3ad", "#f7ac78", "#dc636e", "#9e2a7d", "#002287"]
+        colours = ["#ffa600", "#ff6361", "#bc5090", "#58508d", "#003f5c"]
 
         # convert source_cap DataFrame to list containing row sums
         source_cap_row_sums = self.source_cap.sum(axis=1).to_list()
         # extract source coordinates to list
         sources = pd.read_csv("coordinates_sources.csv")
-        x_coordinates = sources["xcord"].to_list()
-        y_coordinates = sources["ycord"].to_list()
+        x_coords = sources["xcord"].to_list()
+        y_coords = sources["ycord"].to_list()
         # create the figure and define axis labels and limits
         fig, ax = plt.subplots(figsize=(8, 8))
         ax.set_xlabel("Horizontal distance [km]")
         ax.set_ylabel("Vertical distance [km]")
-        ax.set_xlim(-max(x_coordinates) * 0.3, max(x_coordinates) * 1.3)
-        ax.set_ylim(-max(y_coordinates) * 0.3, max(y_coordinates) * 1.3)
+        ax.set_xlim(-max(x_coords) * 0.2, max(x_coords) * 1.2)
+        ax.set_ylim(-max(y_coords) * 0.2, max(y_coords) * 1.4)
         # draw lines representing exchanged products
         product_flows = pd.read_csv("product_flows.csv")
         for _, row in product_flows.iterrows():
@@ -951,60 +951,76 @@ class Infrastructure:
             destination_int = name_to_int(row["Destination"])
             # draw line only if origin and destination have different node num.
             if origin_int != destination_int:
-                # do not plot if product is not PC, PO, or PS
-                if (
-                    row["Product"] != "Briq"
-                    and row["Product"] != "pyrOil"
-                    and row["Product"] != "ANL"
-                    and row["Product"] != "P-TOL"
-                ):
-                    break
-                # otherwise, plot with selected product flow colour
+                # plot line with selected product flow colour
+                if row["Product"] == "ETICS":
+                    colour = colours[0]
+                elif row["Product"] == "compressed_ETICS":
+                    colour = colours[1]
+                elif row["Product"] == "pre_concentrate":
+                    colour = colours[2]
+                elif row["Product"] == "pyrolysis_oil":
+                    colour = colours[3]
                 else:
-                    if row["Product"] == "Briq":
-                        colour = colours[2]
-                    elif row["Product"] == "pyrOil":
-                        colour = colours[3]
-                    elif row["Product"] == "ANL" or row["Product"] == "P-TOL":
-                        colour = colours[4]
-                    # draw the corresponding product flow line
-                    x = (x_coordinates[origin_int], x_coordinates[destination_int])
-                    y = (y_coordinates[origin_int], y_coordinates[destination_int])
-                    plt.plot(x, y, c=colour)
+                    colour = colours[4]
+                # draw the corresponding product flow line
+                x = (x_coords[origin_int], x_coords[destination_int])
+                y = (y_coords[origin_int], y_coords[destination_int])
+                plt.plot(x, y, lw=2, c=colour)
+                # annotate the line with an arrow showing flow direction
+                x_diff = x_coords[destination_int] - x_coords[origin_int]
+                y_diff = y_coords[destination_int] - y_coords[origin_int]
+                plt.annotate(
+                    "",
+                    xy=(
+                        x_coords[origin_int] + 0.8 * x_diff,
+                        y_coords[origin_int] + 0.8 * y_diff,
+                    ),
+                    xytext=(
+                        x_coords[origin_int] + 0.6 * x_diff,
+                        y_coords[origin_int] + 0.6 * y_diff,
+                    ),
+                    arrowprops=dict(
+                        arrowstyle="->", lw=2, color=colour, mutation_scale=25
+                    ),
+                )
         # convert name_list of installed facilities into an int_list
-        int_list_CF = name_list_to_int_list(self.name_list_CF)
-        int_list_RTF = name_list_to_int_list(self.name_list_RTF)
+        int_list_OCF = name_list_to_int_list(self.name_list_OCF)
+        int_list_MPF = name_list_to_int_list(self.name_list_MPF)
         int_list_CPF = name_list_to_int_list(self.name_list_CPF)
         int_list_DPF = name_list_to_int_list(self.name_list_DPF)
         # loop over the source coordinates (that is, number of nodes)
-        for idx in range(0, len(x_coordinates)):
-            # do not plot if the node has no facilities installed
-            if (
-                idx not in int_list_DPF
-                and idx not in int_list_CPF
-                and idx not in int_list_RTF
-                and idx not in int_list_CF
-            ):
-                break
-            # otherwise, plot node with selected marker colour
+        factor = int(300 / max(source_cap_row_sums))
+        for idx in range(0, len(x_coords)):
+            # plot node with select node colour
+            if idx in int_list_DPF:
+                colour = colours[4]
+            elif idx in int_list_CPF:
+                colour = colours[3]
+            elif idx in int_list_MPF:
+                colour = colours[2]
+            elif idx in int_list_OCF:
+                colour = colours[1]
             else:
-                if idx in int_list_DPF:
-                    colour = colours[4]
-                elif idx in int_list_CPF:
-                    colour = colours[3]
-                elif idx in int_list_RTF:
-                    colour = colours[2]
-                elif idx in int_list_CF:
-                    colour = colours[1]
-                # plot the node
-                plt.scatter(
-                    x_coordinates[idx],
-                    y_coordinates[idx],
-                    c=colour,
-                    s=source_cap_row_sums[idx],
-                    zorder=2.5,
-                )
+                colour = colours[0]
+            # plot the node
+            plt.scatter(
+                x_coords[idx],
+                y_coords[idx],
+                c=colour,
+                s=source_cap_row_sums[idx] * factor,
+                zorder=2.5,
+            )
         # create manual symbols for legend
+        point_S = mlines.Line2D(
+            [0],
+            [0],
+            label="only S",
+            marker="o",
+            markersize=10,
+            markeredgecolor=colours[0],
+            markerfacecolor=colours[0],
+            linestyle="",
+        )
         point_OCF = mlines.Line2D(
             [0],
             [0],
@@ -1045,6 +1061,18 @@ class Infrastructure:
             markerfacecolor=colours[4],
             linestyle="",
         )
+        line_ET = mlines.Line2D(
+            [0],
+            [0],
+            label="ETICS flow",
+            c=colours[0],
+        )
+        line_CE = mlines.Line2D(
+            [0],
+            [0],
+            label="compressed ETICS flow",
+            c=colours[1],
+        )
         line_PC = mlines.Line2D(
             [0],
             [0],
@@ -1060,15 +1088,18 @@ class Infrastructure:
         line_PS = mlines.Line2D(
             [0],
             [0],
-            label="polystyrene flow",
+            label="styrene flow",
             c=colours[4],
         )
         plt.legend(
             handles=[
+                point_S,
                 point_OCF,
                 point_MPF,
                 point_CPF,
                 point_DPF,
+                line_ET,
+                line_CE,
                 line_PC,
                 line_PO,
                 line_PS,
