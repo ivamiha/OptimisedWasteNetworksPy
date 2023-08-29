@@ -242,16 +242,16 @@ class Infrastructure:
                     )
         # OCF installation binary outcomes
         for j in self.OCF:
-            b[j] = model.addVar(vtype="BINARY", name="b(%s)" % j)
+            b[j] = model.addVar(vtype="INTEGER", name="b(%s)" % j)
         # MPF installation binary outcomes
         for k in self.MPF:
-            b[k] = model.addVar(vtype="BINARY", name="b(%s)" % k)
+            b[k] = model.addVar(vtype="INTEGER", name="b(%s)" % k)
         # CPF installation binary outcomes
         for l in self.CPF:
-            b[l] = model.addVar(vtype="BINARY", name="b(%s)" % l)
+            b[l] = model.addVar(vtype="INTEGER", name="b(%s)" % l)
         # DPF installation binary outcomes
         for m in self.DPF:
-            b[m] = model.addVar(vtype="BINARY", name="b(%s)" % m)
+            b[m] = model.addVar(vtype="INTEGER", name="b(%s)" % m)
 
         # add constraint for flow conservation at sources to the model
         for p in self.P:
@@ -929,7 +929,6 @@ class Infrastructure:
 
         # define colour scheme used throughout using hex notation
         # colours correspond to: yellow, orange, red, purple, indigo
-        # colours = ["#fff3ad", "#f7ac78", "#dc636e", "#9e2a7d", "#002287"]
         colours = ["#ffa600", "#ff6361", "#bc5090", "#58508d", "#003f5c"]
 
         # convert source_cap DataFrame to list containing row sums
@@ -1108,6 +1107,7 @@ class Infrastructure:
             ncol=2,
             frameon=False,
         )
+        plt.title(f"Net profit: {self.OBJ:.2f} euro/day")
         fig.savefig("results_product_flow.pdf", dpi=1200)
         plt.show()
 

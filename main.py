@@ -8,7 +8,7 @@ import pandas as pd
 n = 3
 
 # define nodes on which customers are located
-customers = [0, 4, 8]
+customers = [0, 4, 8, 15]
 
 # generate region defined by distances between sources & sinks
 distances = network.region_generator(25, n, customers)
@@ -76,7 +76,8 @@ yield_factor = {
 }
 
 # specify maximum facility capacities [tons/day]
-facility_capacity = {"OCF": 50, "MPF": 50, "CPF": 12, "DPF": 30}
+# facility_capacity = {"OCF": 50, "MPF": 50, "CPF": 12, "DPF": 30}
+facility_capacity = {"OCF": 0.4, "MPF": 41, "CPF": 12, "DPF": 30}
 
 # initiate ``Infrastructure`` class based on distances from building network
 scenario = optimisation.Infrastructure(
