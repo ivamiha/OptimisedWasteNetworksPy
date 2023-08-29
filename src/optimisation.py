@@ -1,4 +1,5 @@
 import pyscipopt as scip
+import gurobipy as gp
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.offsetbox as osb
@@ -197,7 +198,8 @@ class Infrastructure:
         """
 
         # initialise optimisation problem
-        model = scip.Model("value_chain")
+        # model = scip.Model("value_chain")
+        model = gp.Model("value_chain")
 
         # initialise variables whose scope is this function
         b = {}  # binary variable, represents open/close decisions
@@ -256,8 +258,8 @@ class Infrastructure:
         # add constraint for flow conservation at sources to the model
         for p in self.P:
             for i in self.S:
-                model.addCons(
-                    scip.quicksum(x[p, i, j] for j in self.OCF)
+                model.addConstr(
+                    gp.quicksum(x[p, i, j] for j in self.OCF)
                     == self.source_cap.loc[i, p],
                     name="Conservation(%s,%s)" % (p, i),
                 )
@@ -266,59 +268,59 @@ class Infrastructure:
         for p in self.P:
             for j in self.OCF:
                 # input ETICS, output compressed ETICS
-                model.addCons(
+                model.addConstr(
                     self.yield_factor[(p, "OCF")]
-                    * scip.quicksum(x[p, i, j] for i in self.S for p in self.PP)
-                    == scip.quicksum(x[p, j, k] for k in self.MPF),
+                    * gp.quicksum(x[p, i, j] for i in self.S for p in self.PP)
+                    == gp.quicksum(x[p, j, k] for k in self.MPF),
                     name="Conservation(%s,%s)" % (p, j),
                 )
             for k in self.MPF:
                 # input compressed ETICS, output pre-concentrate
-                model.addCons(
+                model.addConstr(
                     self.yield_factor[(p, "MPF")]
-                    * scip.quicksum(x[p, j, k] for j in self.OCF for p in self.PP)
-                    == scip.quicksum(x[p, k, l] for l in self.CPF),
+                    * gp.quicksum(x[p, j, k] for j in self.OCF for p in self.PP)
+                    == gp.quicksum(x[p, k, l] for l in self.CPF),
                     name="Conservation(%s,%s)" % (p, k),
                 )
             for l in self.CPF:
                 # input pre-concentrate, output pyrolysis oil
-                model.addCons(
+                model.addConstr(
                     self.yield_factor[(p, "CPF")]
-                    * scip.quicksum(x[p, k, l] for k in self.MPF for p in self.PP)
-                    == scip.quicksum(x[p, l, m] for m in self.DPF),
+                    * gp.quicksum(x[p, k, l] for k in self.MPF for p in self.PP)
+                    == gp.quicksum(x[p, l, m] for m in self.DPF),
                     name="Conservation(%s,%s)" % (p, l),
                 )
             for m in self.DPF:
                 # input pyrolysis oil, output styrene
-                model.addCons(
+                model.addConstr(
                     self.yield_factor[(p, "DPF")]
-                    * scip.quicksum(x[p, l, m] for l in self.CPF for p in self.PP)
-                    == scip.quicksum(x[p, m, n] for n in self.C),
+                    * gp.quicksum(x[p, l, m] for l in self.CPF for p in self.PP)
+                    == gp.quicksum(x[p, m, n] for n in self.C),
                     name="Conservation(%s,%s)" % (p, m),
                 )
 
         # add capacity constraint for the facilities to the model
         for j in self.OCF:
-            model.addCons(
-                scip.quicksum(x[p, i, j] for i in self.S for p in self.P)
+            model.addConstr(
+                gp.quicksum(x[p, i, j] for i in self.S for p in self.P)
                 <= b[j] * self.facility_cap["OCF"],
                 name="Capacity(%s)" % j,
             )
         for k in self.MPF:
-            model.addCons(
-                scip.quicksum(x[p, j, k] for j in self.OCF for p in self.P)
+            model.addConstr(
+                gp.quicksum(x[p, j, k] for j in self.OCF for p in self.P)
                 <= b[k] * self.facility_cap["MPF"],
                 name="Capacity(%s)" % k,
             )
         for l in self.CPF:
-            model.addCons(
-                scip.quicksum(x[p, k, l] for k in self.MPF for p in self.P)
+            model.addConstr(
+                gp.quicksum(x[p, k, l] for k in self.MPF for p in self.P)
                 <= b[l] * self.facility_cap["CPF"],
                 name="Capacity(%s)" % l,
             )
         for m in self.DPF:
-            model.addCons(
-                scip.quicksum(x[p, l, m] for l in self.CPF for p in self.P)
+            model.addConstr(
+                gp.quicksum(x[p, l, m] for l in self.CPF for p in self.P)
                 <= b[m] * self.facility_cap["DPF"],
                 name="Capacity(%s)" % m,
             )
@@ -326,8 +328,8 @@ class Infrastructure:
         # add demand satisfaction constraint to the model
         for p in self.P:
             for n in self.C:
-                model.addCons(
-                    scip.quicksum(x[p, m, n] for m in self.DPF) <= self.D[(p, n)],
+                model.addConstr(
+                    gp.quicksum(x[p, m, n] for m in self.DPF) <= self.D[(p, n)],
                     name="Demand(%s,%s)" % (p, n),
                 )
 
@@ -335,9 +337,9 @@ class Infrastructure:
         # NOTE: this is a new constraint not mentioned in the paper
         for i in self.S:
             for j in self.OCF:
-                model.addCons(
-                    scip.quicksum(x[p, i, j] for p in self.P) * self.D1.loc[i, j]
-                    <= (scip.quicksum(x[p, i, j] for p in self.P))
+                model.addConstr(
+                    gp.quicksum(x[p, i, j] for p in self.P) * self.D1.loc[i, j]
+                    <= (gp.quicksum(x[p, i, j] for p in self.P))
                     * self.avg_speed
                     * self.max_time,
                     name="Travel Time(%s,%s)" % (j, i),
@@ -345,75 +347,75 @@ class Infrastructure:
 
         # add objective function to the model
         model.setObjective(
-            scip.quicksum(
+            gp.quicksum(
                 self.market_price[p]
-                * scip.quicksum(x[p, m, n] for m in self.DPF for n in self.C)
+                * gp.quicksum(x[p, m, n] for m in self.DPF for n in self.C)
                 for p in self.P
             )
             - (
-                scip.quicksum(self.fixed_OCF * b[j] for j in self.OCF)
-                + scip.quicksum(self.fixed_MPF * b[k] for k in self.MPF)
-                + scip.quicksum(self.fixed_CPF * b[l] for l in self.CPF)
-                + scip.quicksum(self.fixed_DPF * b[m] for m in self.DPF)
+                gp.quicksum(self.fixed_OCF * b[j] for j in self.OCF)
+                + gp.quicksum(self.fixed_MPF * b[k] for k in self.MPF)
+                + gp.quicksum(self.fixed_CPF * b[l] for l in self.CPF)
+                + gp.quicksum(self.fixed_DPF * b[m] for m in self.DPF)
             )
             - (
-                scip.quicksum(
+                gp.quicksum(
                     self.variable_OCF
-                    * scip.quicksum(x[p, i, j] for i in self.S for p in self.P)
+                    * gp.quicksum(x[p, i, j] for i in self.S for p in self.P)
                     for j in self.OCF
                 )
-                + scip.quicksum(
+                + gp.quicksum(
                     self.variable_MPF
-                    * scip.quicksum(x[p, j, k] for j in self.OCF for p in self.P)
+                    * gp.quicksum(x[p, j, k] for j in self.OCF for p in self.P)
                     for k in self.MPF
                 )
-                + scip.quicksum(
+                + gp.quicksum(
                     self.variable_CPF
-                    * scip.quicksum(x[p, k, l] for k in self.MPF for p in self.P)
+                    * gp.quicksum(x[p, k, l] for k in self.MPF for p in self.P)
                     for l in self.CPF
                 )
-                + scip.quicksum(
+                + gp.quicksum(
                     self.variable_DPF
-                    * scip.quicksum(x[p, l, m] for l in self.CPF for p in self.P)
+                    * gp.quicksum(x[p, l, m] for l in self.CPF for p in self.P)
                     for m in self.DPF
                 )
             )
             - (
-                scip.quicksum(
+                gp.quicksum(
                     2 * self.D1.loc[i, j] * self.TC_ETICS * x[p, i, j]
                     for i in self.S
                     for j in self.OCF
                     for p in self.P
                 )
-                + scip.quicksum(
+                + gp.quicksum(
                     2 * self.D2.loc[j, k] * self.TC_comp_ETICS * x[p, j, k]
                     for j in self.OCF
                     for k in self.MPF
                     for p in self.P
                 )
-                + scip.quicksum(
+                + gp.quicksum(
                     2 * self.D3.loc[k, l] * self.TC_pre_concentrate * x[p, k, l]
                     for k in self.MPF
                     for l in self.CPF
                     for p in self.P
                 )
-                + scip.quicksum(
+                + gp.quicksum(
                     2 * self.D4.loc[l, m] * self.TC_pyrolysis_oil * x[p, l, m]
                     for l in self.CPF
                     for m in self.DPF
                     for p in self.P
                 )
-                + scip.quicksum(
+                + gp.quicksum(
                     2 * self.D5.loc[m, n] * self.TC_styrene * x[p, m, n]
                     for m in self.DPF
                     for n in self.C
                     for p in self.P
                 )
             ),
-            "maximize",
+            gp.GRB.MAXIMIZE,
         )
 
-        model.data = x, b
+        # model.data = x, b
 
         self.x = x
         self.b = b
@@ -426,8 +428,13 @@ class Infrastructure:
         infrastructure is also plotted for visual inspection.
         """
 
+        # extract resulting variable values and store them in a dictionary
+        vars = {}
+        for var in self.model.getVars():
+            vars[f"{var.varName}"] = var.x
+
         # access solution and print value for objective function (profit)
-        self.OBJ = self.model.getObjVal()
+        self.OBJ = self.model.getObjective().getValue()
         print("\n-------------------------------------------------------------")
         print("Objective Value (Net Profit) = {:.2f} euro/day".format(self.OBJ))
 
@@ -441,40 +448,32 @@ class Infrastructure:
         print("\n-------------------------------------------------------------")
         print("Optional Compacting Facilities")
         for j in self.OCF:
-            if self.model.getVal(self.b[j]) > 0.5:
-                print("{} = {:.2f}".format(j, self.model.getVal(self.b[j])))
+            if vars[f"b({j})"] > 0.5:
+                print("{} = {:.2f}".format(j, vars[f"b({j})"]))
                 name_list_OCF.append(j)
                 print(
                     "Total inflow to {} is {:.2f}".format(
                         j,
-                        sum(
-                            self.model.getVal(self.x[p, i, j])
-                            for i in self.S
-                            for p in self.P
-                        ),
+                        sum(vars[f"x({p},{i},{j})"] for i in self.S for p in self.P),
                     )
                 )
                 print(
                     "Capacity utilization of {} is {:.2f}%".format(
                         j,
-                        sum(
-                            self.model.getVal(self.x[p, i, j])
-                            for i in self.S
-                            for p in self.P
-                        )
+                        sum(vars[f"x({p},{i},{j})"] for i in self.S for p in self.P)
                         / self.facility_cap["OCF"]
                         * 100,
                     )
                 )
             for p in self.P:
                 for i in self.S:
-                    if self.model.getVal(self.x[p, i, j]) > 0.001:
+                    if vars[f"x({p},{i},{j})"] > 0.001:
                         # append flow data from i to j to DataFrame
                         new_data = {
                             "Origin": i,
                             "Destination": j,
                             "Product": p,
-                            "Amount": self.model.getVal(self.x[p, i, j]),
+                            "Amount": vars[f"x({p},{i},{j})"],
                         }
                         self.product_flow = self.product_flow._append(
                             new_data, ignore_index=True
@@ -484,7 +483,7 @@ class Infrastructure:
         # print out installed OCFs
         print(
             "Total number of optional compacting facilities = {:.2f}".format(
-                sum(self.model.getVal(self.b[j]) for j in self.OCF)
+                sum(vars[f"b({j})"] for j in self.OCF)
             )
         )
         print("List of optional compacting facilities:", self.name_list_OCF)
@@ -494,40 +493,32 @@ class Infrastructure:
         print("\n-------------------------------------------------------------")
         print("Mechanical Preprocessing Facilities")
         for k in self.MPF:
-            if self.model.getVal(self.b[k]) > 0.5:
-                print("{} = {:.2f}".format(k, self.model.getVal(self.b[k])))
+            if vars[f"b({k})"] > 0.5:
+                print("{} = {:.2f}".format(k, vars[f"b({k})"]))
                 name_list_MPF.append(k)
                 print(
                     "Total inflow to {} is {:.2f}".format(
                         k,
-                        sum(
-                            self.model.getVal(self.x[p, j, k])
-                            for j in self.OCF
-                            for p in self.P
-                        ),
+                        sum(vars[f"x({p},{j},{k})"] for j in self.OCF for p in self.P),
                     )
                 )
                 print(
                     "Capacity utilization of {} is {:.2f}%".format(
                         k,
-                        sum(
-                            self.model.getVal(self.x[p, j, k])
-                            for j in self.OCF
-                            for p in self.P
-                        )
+                        sum(vars[f"x({p},{j},{k})"] for j in self.OCF for p in self.P)
                         / self.facility_cap["MPF"]
                         * 100,
                     )
                 )
             for p in self.P:
                 for j in self.OCF:
-                    if self.model.getVal(self.x[p, j, k]) > 0.001:
+                    if vars[f"x({p},{j},{k})"] > 0.001:
                         # append flow data from j to k to DataFrame
                         new_data = {
                             "Origin": j,
                             "Destination": k,
                             "Product": p,
-                            "Amount": self.model.getVal(self.x[p, j, k]),
+                            "Amount": vars[f"x({p},{j},{k})"],
                         }
                         self.product_flow = self.product_flow._append(
                             new_data, ignore_index=True
@@ -537,7 +528,7 @@ class Infrastructure:
         # print installed MPFs
         print(
             "Total number of mechanical preprocessing facilities = {:.2f}".format(
-                sum(self.model.getVal(self.b[k]) for k in self.MPF)
+                sum(vars[f"b({k})"] for k in self.MPF)
             )
         )
         print("List of mechanical preprocessing facilities:", self.name_list_MPF)
@@ -547,40 +538,32 @@ class Infrastructure:
         print("\n-------------------------------------------------------------")
         print("Chemical Processing Facilities")
         for l in self.CPF:
-            if self.model.getVal(self.b[l]) > 0.5:
-                print("{} = {:.2f}".format(l, self.model.getVal(self.b[l])))
+            if vars[f"b({l})"] > 0.5:
+                print("{} = {:.2f}".format(l, vars[f"b({l})"]))
                 name_list_CPF.append(l)
                 print(
                     "Total inflow to {} is {:.2f}".format(
                         l,
-                        sum(
-                            self.model.getVal(self.x[p, k, l])
-                            for k in self.MPF
-                            for p in self.P
-                        ),
+                        sum(vars[f"x({p},{k},{l})"] for k in self.MPF for p in self.P),
                     )
                 )
                 print(
                     "Capacity utilization of {} is {:.2f}%".format(
                         l,
-                        sum(
-                            self.model.getVal(self.x[p, k, l])
-                            for k in self.MPF
-                            for p in self.P
-                        )
+                        sum(vars[f"x({p},{k},{l})"] for k in self.MPF for p in self.P)
                         / self.facility_cap["CPF"]
                         * 100,
                     )
                 )
             for p in self.P:
                 for k in self.MPF:
-                    if self.model.getVal(self.x[p, k, l]) > 0.001:
+                    if vars[f"x({p},{k},{l})"] > 0.001:
                         # append flow data from k to l to DataFrame
                         new_data = {
                             "Origin": k,
                             "Destination": l,
                             "Product": p,
-                            "Amount": self.model.getVal(self.x[p, k, l]),
+                            "Amount": vars[f"x({p},{k},{l})"],
                         }
                         self.product_flow = self.product_flow._append(
                             new_data, ignore_index=True
@@ -590,7 +573,7 @@ class Infrastructure:
         # print installed CPFs
         print(
             "Total number of chemical processing facilities = {:.2f}".format(
-                sum(self.model.getVal(self.b[l]) for l in self.CPF)
+                sum(vars[f"b({l})"] for l in self.CPF)
             )
         )
         print("List of chemical processing facilities:", self.name_list_CPF)
@@ -600,40 +583,32 @@ class Infrastructure:
         print("\n-------------------------------------------------------------")
         print("Downstream Processing Facilities")
         for m in self.DPF:
-            if self.model.getVal(self.b[m]) > 0.5:
-                print("{} = {:.2f}".format(m, self.model.getVal(self.b[m])))
+            if vars[f"b({m})"] > 0.5:
+                print("{} = {:.2f}".format(m, vars[f"b({m})"]))
                 name_list_DPF.append(m)
                 print(
                     "Total inflow to {} is {:.2f}".format(
                         m,
-                        sum(
-                            self.model.getVal(self.x[p, l, m])
-                            for l in self.CPF
-                            for p in self.P
-                        ),
+                        sum(vars[f"x({p},{l},{m})"] for l in self.CPF for p in self.P),
                     )
                 )
                 print(
                     "Capacity utilization of {} is {:.2f}%".format(
                         m,
-                        sum(
-                            self.model.getVal(self.x[p, l, m])
-                            for l in self.CPF
-                            for p in self.P
-                        )
+                        sum(vars[f"x({p},{l},{m})"] for l in self.CPF for p in self.P)
                         / self.facility_cap["DPF"]
                         * 100,
                     )
                 )
             for p in self.P:
                 for l in self.CPF:
-                    if self.model.getVal(self.x[p, l, m]) > 0.001:
+                    if vars[f"x({p},{l},{m})"] > 0.001:
                         # append flow data from l to m to DataFrame
                         new_data = {
                             "Origin": l,
                             "Destination": m,
                             "Product": p,
-                            "Amount": self.model.getVal(self.x[p, l, m]),
+                            "Amount": vars[f"x({p},{l},{m})"],
                         }
                         self.product_flow = self.product_flow._append(
                             new_data, ignore_index=True
@@ -642,13 +617,13 @@ class Infrastructure:
         for m in self.DPF:
             for p in self.P:
                 for n in self.C:
-                    if self.model.getVal(self.x[p, m, n]) > 0.001:
+                    if vars[f"x({p},{m},{n})"] > 0.001:
                         # append flow data from m to n to DataFrame
                         new_data = {
                             "Origin": m,
                             "Destination": n,
                             "Product": p,
-                            "Amount": self.model.getVal(self.x[p, m, n]),
+                            "Amount": vars[f"x({p},{m},{n})"],
                         }
                         self.product_flow = self.product_flow._append(
                             new_data, ignore_index=True
@@ -658,7 +633,7 @@ class Infrastructure:
         # print installed DPFs
         print(
             "Total number of downstream processing facilities = {:.2f}".format(
-                sum(self.model.getVal(self.b[m]) for m in self.DPF)
+                sum(vars[f"b({m})"] for m in self.DPF)
             )
         )
         print("List of downstream processing facilities:", self.name_list_DPF)
@@ -670,7 +645,7 @@ class Infrastructure:
         for p in self.P:
             for n in self.C:
                 demand_satisfaction[(p, n)] = sum(
-                    self.model.getVal(self.x[p, m, n]) for m in self.DPF
+                    vars[f"x({p},{m},{n})"] for m in self.DPF
                 )
                 print(
                     "Demand Satisfaction of {} = {:.2f} ton/day {}".format(
@@ -699,7 +674,7 @@ class Infrastructure:
             2
             * self.D1.loc[i, j]
             * self.TC_ETICS
-            * sum(self.model.getVal(self.x[p, i, j]) for p in self.P)
+            * sum(vars[f"x({p},{i},{j})"] for p in self.P)
             for i in self.S
             for j in self.OCF
         )
@@ -713,7 +688,7 @@ class Infrastructure:
             2
             * self.D2.loc[j, k]
             * self.TC_comp_ETICS
-            * sum(self.model.getVal(self.x[p, j, k]) for p in self.P)
+            * sum(vars[f"x({p},{j},{k})"] for p in self.P)
             for j in self.OCF
             for k in self.MPF
         )
@@ -727,7 +702,7 @@ class Infrastructure:
             2
             * self.D3.loc[k, l]
             * self.TC_pre_concentrate
-            * sum(self.model.getVal(self.x[p, k, l]) for p in self.P)
+            * sum(vars[f"x({p},{k},{l})"] for p in self.P)
             for k in self.MPF
             for l in self.CPF
         )
@@ -741,7 +716,7 @@ class Infrastructure:
             2
             * self.D4.loc[l, m]
             * self.TC_pyrolysis_oil
-            * sum(self.model.getVal(self.x[p, l, m]) for p in self.P)
+            * sum(vars[f"x({p},{l},{m})"] for p in self.P)
             for l in self.CPF
             for m in self.DPF
         )
@@ -755,7 +730,7 @@ class Infrastructure:
             2
             * self.D5.loc[m, n]
             * self.TC_styrene
-            * sum(self.model.getVal(self.x[p, m, n]) for p in self.P)
+            * sum(vars[f"x({p},{m},{n})"] for p in self.P)
             for m in self.DPF
             for n in self.C
         )
@@ -767,18 +742,10 @@ class Infrastructure:
 
         # print CAPEX of the value chain per facility
         print("\nCapital Expenditure (CAPEX)")
-        self.capex_OCF = sum(
-            self.fixed_OCF * self.model.getVal(self.b[j]) for j in self.OCF
-        )
-        self.capex_MPF = sum(
-            self.fixed_MPF * self.model.getVal(self.b[k]) for k in self.MPF
-        )
-        self.capex_CPF = sum(
-            self.fixed_CPF * self.model.getVal(self.b[l]) for l in self.CPF
-        )
-        self.capex_DPF = sum(
-            self.fixed_DPF * self.model.getVal(self.b[m]) for m in self.DPF
-        )
+        self.capex_OCF = sum(self.fixed_OCF * vars[f"b({j})"] for j in self.OCF)
+        self.capex_MPF = sum(self.fixed_MPF * vars[f"b({k})"] for k in self.MPF)
+        self.capex_CPF = sum(self.fixed_CPF * vars[f"b({l})"] for l in self.CPF)
+        self.capex_DPF = sum(self.fixed_DPF * vars[f"b({m})"] for m in self.DPF)
         print("CAPEX of OCFs is {:.2f} euro/day".format(self.capex_OCF))
         print("CAPEX of MPFs is {:.2f} euro/day".format(self.capex_MPF))
         print("CAPEX of CPFs is {:.2f} euro/day".format(self.capex_CPF))
@@ -788,22 +755,22 @@ class Infrastructure:
         print("\nOperating Cost (OPEX)")
         self.opex_OCF = sum(
             self.variable_OCF
-            * sum(self.model.getVal(self.x[p, i, j]) for i in self.S for p in self.P)
+            * sum(vars[f"x({p},{i},{j})"] for i in self.S for p in self.P)
             for j in self.OCF
         )
         self.opex_MPF = sum(
             self.variable_MPF
-            * sum(self.model.getVal(self.x[p, j, k]) for j in self.OCF for p in self.P)
+            * sum(vars[f"x({p},{j},{k})"] for j in self.OCF for p in self.P)
             for k in self.MPF
         )
         self.opex_CPF = sum(
             self.variable_CPF
-            * sum(self.model.getVal(self.x[p, k, l]) for k in self.MPF for p in self.P)
+            * sum(vars[f"x({p},{k},{l})"] for k in self.MPF for p in self.P)
             for l in self.CPF
         )
         self.opex_DPF = sum(
             self.variable_DPF
-            * sum(self.model.getVal(self.x[p, l, m]) for l in self.CPF for p in self.P)
+            * sum(vars[f"x({p},{l},{m})"] for l in self.CPF for p in self.P)
             for m in self.DPF
         )
         print("OPEX of OCFs is {:.2f} euro/day".format(self.opex_OCF))

@@ -5,13 +5,13 @@ import numpy as np
 import pandas as pd
 
 # number of sources per side of region
-n = 3
+n = 4
 
 # define nodes on which customers are located
-customers = [0, 4, 8, 15]
+customers = [0, 4, 8]
 
 # generate region defined by distances between sources & sinks
-distances = network.region_generator(25, n, customers)
+distances = network.region_generator(200, n, customers)
 
 # specify product set for the value chain
 products = [
@@ -23,7 +23,8 @@ products = [
 ]
 
 # set a seed for the random number generator
-seed_value = 1734176512
+# seed_value = 1734176512
+seed_value = 333242
 random.seed(seed_value)
 
 # specify product capacity at sources [tons]
@@ -76,7 +77,6 @@ yield_factor = {
 }
 
 # specify maximum facility capacities [tons/day]
-# facility_capacity = {"OCF": 50, "MPF": 50, "CPF": 12, "DPF": 30}
 facility_capacity = {"OCF": 0.4, "MPF": 41, "CPF": 12, "DPF": 30}
 
 # initiate ``Infrastructure`` class based on distances from building network
@@ -93,7 +93,8 @@ scenario.define_value_chain(
 scenario.model_value_chain()
 
 # solve the optimisation problem
-scenario.model.solveConcurrent()
+# scenario.model.solveConcurrent()
+scenario.model.optimize()
 
 # process optimisation problem results
 scenario.process_results()
