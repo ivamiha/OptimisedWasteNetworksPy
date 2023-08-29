@@ -33,12 +33,12 @@ class Infrastructure:
     rho_compressed_ETICS = 0.14  # density of compressed ETICS [ton/m^3]
     rho_pre_concentrate = 0.35  # density of pre-concentrate [ton/m^3]
     rho_pyrolysis_oil = 0.80  # density of pyrolysis oil [ton/m^3]
-    rho_polystyrene = 0.910  # density of polystyrene [ton/m^3]
+    rho_styrene = 0.910  # density of styrene [ton/m^3]
     max_time = 100  # maximum transportation between facilities [hours]
-    variable_OCF = 15  # operational costs of OCF [euro/ton]
+    variable_OCF = 11  # operational costs of OCF [euro/ton]
     variable_MPF = 46  # operational cost of MPF [euro/ton]
-    variable_CPF = 500  # operational cost of CPF [euro/ton]
-    variable_DPF = 500  # operational cost of DPF [euro/ton]
+    variable_CPF = 44  # operational cost of CPF [euro/ton]
+    variable_DPF = 100  # operational cost of DPF [euro/ton]
     period = 10  # loan period [years]
     rate = 0.1
 
@@ -139,9 +139,9 @@ class Infrastructure:
         self.D = D
 
         # calculate total capital invesment cost wrt capacity [euro]
-        self.TCI_OCF = 1.45 * ((self.facility_cap["OCF"] / 100) ** 0.6) * (10**6)
-        self.TCI_MPF = 2.88 * ((self.facility_cap["MPF"] / 100) ** 0.6) * (10**6)
-        self.TCI_CPF = 100 * ((self.facility_cap["CPF"] / 278) ** 0.6) * (10**6)
+        self.TCI_OCF = 0.057 * ((self.facility_cap["OCF"] / 0.384) ** 0.6) * (10**6)
+        self.TCI_MPF = 8 * ((self.facility_cap["MPF"] / 41.6) ** 0.6) * (10**6)
+        self.TCI_CPF = 20.2 * ((self.facility_cap["CPF"] / 110) ** 0.6) * (10**6)
         self.TCI_DPF = 250 * ((self.facility_cap["DPF"] / 278) ** 0.6) * (10**6)
 
         # calculate annualized capital investment cost per day [euro/day]
@@ -183,12 +183,12 @@ class Infrastructure:
             + (self.driver_wage / self.driver_hours + self.vehicle_cost_tanker)
             / self.avg_speed
         ) / (self.max_volume_large_tanker * self.rho_pyrolysis_oil)
-        # assume volume is limiting factor for polystyrene, using large tanker
-        self.TC_polystyrene = (
+        # assume volume is limiting factor for styrene, using large tanker
+        self.TC_styrene = (
             (self.fuel_price * self.fuel_cons + self.toll_cost)
             + (self.driver_wage / self.driver_hours + self.vehicle_cost)
             / self.avg_speed
-        ) / (self.max_volume_large_tanker * self.rho_polystyrene)
+        ) / (self.max_volume_large_tanker * self.rho_styrene)
 
     def model_value_chain(self):
         """
@@ -265,15 +265,15 @@ class Infrastructure:
         # add constraints for flow conservation at facilities to the model
         for p in self.P:
             for j in self.OCF:
-                # input PU, output PU
+                # input ETICS, output compressed ETICS
                 model.addCons(
                     self.yield_factor[(p, "OCF")]
-                    * scip.quicksum(x[p, i, j] for i in self.S)
+                    * scip.quicksum(x[p, i, j] for i in self.S for p in self.PP)
                     == scip.quicksum(x[p, j, k] for k in self.MPF),
                     name="Conservation(%s,%s)" % (p, j),
                 )
             for k in self.MPF:
-                # input PU, output briquette
+                # input compressed ETICS, output pre-concentrate
                 model.addCons(
                     self.yield_factor[(p, "MPF")]
                     * scip.quicksum(x[p, j, k] for j in self.OCF for p in self.PP)
@@ -281,7 +281,7 @@ class Infrastructure:
                     name="Conservation(%s,%s)" % (p, k),
                 )
             for l in self.CPF:
-                # input briquette, output pyrolysis oil
+                # input pre-concentrate, output pyrolysis oil
                 model.addCons(
                     self.yield_factor[(p, "CPF")]
                     * scip.quicksum(x[p, k, l] for k in self.MPF for p in self.PP)
@@ -289,7 +289,7 @@ class Infrastructure:
                     name="Conservation(%s,%s)" % (p, l),
                 )
             for m in self.DPF:
-                # input pyrolysis oil, output aniline & toluidine
+                # input pyrolysis oil, output styrene
                 model.addCons(
                     self.yield_factor[(p, "DPF")]
                     * scip.quicksum(x[p, l, m] for l in self.CPF for p in self.PP)
@@ -404,7 +404,7 @@ class Infrastructure:
                     for p in self.P
                 )
                 + scip.quicksum(
-                    2 * self.D5.loc[m, n] * self.TC_polystyrene * x[p, m, n]
+                    2 * self.D5.loc[m, n] * self.TC_styrene * x[p, m, n]
                     for m in self.DPF
                     for n in self.C
                     for p in self.P
@@ -754,7 +754,7 @@ class Infrastructure:
         self.transportation_cost_5 = sum(
             2
             * self.D5.loc[m, n]
-            * self.TC_polystyrene
+            * self.TC_styrene
             * sum(self.model.getVal(self.x[p, m, n]) for p in self.P)
             for m in self.DPF
             for n in self.C
@@ -831,12 +831,12 @@ class Infrastructure:
         source_cap_row_sums = self.source_cap.sum(axis=1).to_list()
         # extract source coordinates to list
         sources = pd.read_csv("coordinates_sources.csv")
-        x_coordinates = sources["xcord"].to_list()
-        y_coordinates = sources["ycord"].to_list()
+        x_coords = sources["xcord"].to_list()
+        y_coords = sources["ycord"].to_list()
         # extract customer coordinates list
         customers = pd.read_csv("coordinates_customers.csv")
-        x_coordinates_c = customers["xcord"].to_list()
-        y_coordinates_c = customers["ycord"].to_list()
+        x_coords_c = customers["xcord"].to_list()
+        y_coords_c = customers["ycord"].to_list()
         # convert name_list of installed facilities into an int_list
         int_list_OCF = name_list_to_int_list(self.name_list_OCF)
         int_list_MPF = name_list_to_int_list(self.name_list_MPF)
@@ -846,11 +846,11 @@ class Infrastructure:
         fig, ax = plt.subplots(figsize=(8, 8))
         factor = int(300 / max(source_cap_row_sums))
         size = [factor * val for val in source_cap_row_sums]
-        ax.scatter(x_coordinates, y_coordinates, c="k", s=size)
+        ax.scatter(x_coords, y_coords, c="k", s=size)
         ax.set_xlabel("Horizontal distance [km]")
         ax.set_ylabel("Vertical distance [km]")
-        ax.set_xlim(-max(x_coordinates) * 0.3, max(x_coordinates) * 1.3)
-        ax.set_ylim(-max(y_coordinates) * 0.3, max(y_coordinates) * 1.3)
+        ax.set_xlim(-max(x_coords) * 0.3, max(x_coords) * 1.3)
+        ax.set_ylim(-max(y_coords) * 0.3, max(y_coords) * 1.3)
         # chosen offset for annotation from the node
         offset = max(25, self.source_cap.values.max() / 30)
         # annotate nodes where OCFs have been installed
@@ -858,7 +858,7 @@ class Infrastructure:
         for value in int_list_OCF:
             ab = osb.AnnotationBbox(
                 imagebox,
-                xy=(x_coordinates[value], y_coordinates[value]),
+                xy=(x_coords[value], y_coords[value]),
                 xybox=(-offset, 0),
                 frameon=False,
                 boxcoords="offset points",
@@ -869,7 +869,7 @@ class Infrastructure:
         for value in int_list_MPF:
             ab = osb.AnnotationBbox(
                 imagebox,
-                xy=(x_coordinates[value], y_coordinates[value]),
+                xy=(x_coords[value], y_coords[value]),
                 xybox=(-offset * math.sqrt(2) / 2, offset * math.sqrt(2) / 2),
                 frameon=False,
                 boxcoords="offset points",
@@ -880,7 +880,7 @@ class Infrastructure:
         for value in int_list_CPF:
             ab = osb.AnnotationBbox(
                 imagebox,
-                xy=(x_coordinates[value], y_coordinates[value]),
+                xy=(x_coords[value], y_coords[value]),
                 xybox=(0, offset),
                 frameon=False,
                 boxcoords="offset points",
@@ -891,7 +891,7 @@ class Infrastructure:
         for value in int_list_DPF:
             ab = osb.AnnotationBbox(
                 imagebox,
-                xy=(x_coordinates[value], y_coordinates[value]),
+                xy=(x_coords[value], y_coords[value]),
                 xybox=(offset * math.sqrt(2) / 2, offset * math.sqrt(2) / 2),
                 frameon=False,
                 boxcoords="offset points",
@@ -899,10 +899,10 @@ class Infrastructure:
             plt.gca().add_artist(ab)
         # annotate nodes where customers are located
         imagebox = osb.OffsetImage(plt.imread("icons/C.png"), zoom=0.03)
-        for idx in range(0, len(x_coordinates_c)):
+        for idx in range(0, len(x_coords_c)):
             ab = osb.AnnotationBbox(
                 imagebox,
-                xy=(x_coordinates_c[idx], y_coordinates_c[idx]),
+                xy=(x_coords_c[idx], y_coords_c[idx]),
                 xybox=(offset, 0),
                 frameon=False,
                 boxcoords="offset points",
@@ -929,20 +929,21 @@ class Infrastructure:
 
         # define colour scheme used throughout using hex notation
         # colours correspond to: yellow, orange, red, purple, indigo
-        colours = ["#fff3ad", "#f7ac78", "#dc636e", "#9e2a7d", "#002287"]
+        # colours = ["#fff3ad", "#f7ac78", "#dc636e", "#9e2a7d", "#002287"]
+        colours = ["#ffa600", "#ff6361", "#bc5090", "#58508d", "#003f5c"]
 
         # convert source_cap DataFrame to list containing row sums
         source_cap_row_sums = self.source_cap.sum(axis=1).to_list()
         # extract source coordinates to list
         sources = pd.read_csv("coordinates_sources.csv")
-        x_coordinates = sources["xcord"].to_list()
-        y_coordinates = sources["ycord"].to_list()
+        x_coords = sources["xcord"].to_list()
+        y_coords = sources["ycord"].to_list()
         # create the figure and define axis labels and limits
         fig, ax = plt.subplots(figsize=(8, 8))
         ax.set_xlabel("Horizontal distance [km]")
         ax.set_ylabel("Vertical distance [km]")
-        ax.set_xlim(-max(x_coordinates) * 0.2, max(x_coordinates) * 1.2)
-        ax.set_ylim(-max(y_coordinates) * 0.2, max(y_coordinates) * 1.4)
+        ax.set_xlim(-max(x_coords) * 0.2, max(x_coords) * 1.2)
+        ax.set_ylim(-max(y_coords) * 0.2, max(y_coords) * 1.4)
         # draw lines representing exchanged products
         product_flows = pd.read_csv("product_flows.csv")
         for _, row in product_flows.iterrows():
@@ -962,9 +963,26 @@ class Infrastructure:
                 else:
                     colour = colours[4]
                 # draw the corresponding product flow line
-                x = (x_coordinates[origin_int], x_coordinates[destination_int])
-                y = (y_coordinates[origin_int], y_coordinates[destination_int])
-                plt.plot(x, y, c=colour)
+                x = (x_coords[origin_int], x_coords[destination_int])
+                y = (y_coords[origin_int], y_coords[destination_int])
+                plt.plot(x, y, lw=2, c=colour)
+                # annotate the line with an arrow showing flow direction
+                x_diff = x_coords[destination_int] - x_coords[origin_int]
+                y_diff = y_coords[destination_int] - y_coords[origin_int]
+                plt.annotate(
+                    "",
+                    xy=(
+                        x_coords[origin_int] + 0.8 * x_diff,
+                        y_coords[origin_int] + 0.8 * y_diff,
+                    ),
+                    xytext=(
+                        x_coords[origin_int] + 0.6 * x_diff,
+                        y_coords[origin_int] + 0.6 * y_diff,
+                    ),
+                    arrowprops=dict(
+                        arrowstyle="->", lw=2, color=colour, mutation_scale=25
+                    ),
+                )
         # convert name_list of installed facilities into an int_list
         int_list_OCF = name_list_to_int_list(self.name_list_OCF)
         int_list_MPF = name_list_to_int_list(self.name_list_MPF)
@@ -972,33 +990,26 @@ class Infrastructure:
         int_list_DPF = name_list_to_int_list(self.name_list_DPF)
         # loop over the source coordinates (that is, number of nodes)
         factor = int(300 / max(source_cap_row_sums))
-        for idx in range(0, len(x_coordinates)):
-            # do not plot if the node has no facilities installed
-            if (
-                idx not in int_list_DPF
-                and idx not in int_list_CPF
-                and idx not in int_list_MPF
-                and idx not in int_list_OCF
-            ):
-                break
-            # otherwise, plot node with selected marker colour
+        for idx in range(0, len(x_coords)):
+            # plot node with select node colour
+            if idx in int_list_DPF:
+                colour = colours[4]
+            elif idx in int_list_CPF:
+                colour = colours[3]
+            elif idx in int_list_MPF:
+                colour = colours[2]
+            elif idx in int_list_OCF:
+                colour = colours[1]
             else:
-                if idx in int_list_DPF:
-                    colour = colours[4]
-                elif idx in int_list_CPF:
-                    colour = colours[3]
-                elif idx in int_list_MPF:
-                    colour = colours[2]
-                elif idx in int_list_OCF:
-                    colour = colours[1]
-                # plot the node
-                plt.scatter(
-                    x_coordinates[idx],
-                    y_coordinates[idx],
-                    c=colour,
-                    s=source_cap_row_sums[idx] * factor,
-                    zorder=2.5,
-                )
+                colour = colours[0]
+            # plot the node
+            plt.scatter(
+                x_coords[idx],
+                y_coords[idx],
+                c=colour,
+                s=source_cap_row_sums[idx] * factor,
+                zorder=2.5,
+            )
         # create manual symbols for legend
         point_S = mlines.Line2D(
             [0],
@@ -1077,7 +1088,7 @@ class Infrastructure:
         line_PS = mlines.Line2D(
             [0],
             [0],
-            label="polystyrene flow",
+            label="styrene flow",
             c=colours[4],
         )
         plt.legend(
