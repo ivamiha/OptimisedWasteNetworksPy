@@ -1,17 +1,21 @@
-import src.network as network
-import src.optimisation as optimisation
+import os, sys
 import random
 import numpy as np
 import pandas as pd
 
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import src.network as network
+import src.optimisation as optimisation
+
+
 # number of sources per side of region
-n = 4
+n = 5
 
 # define nodes on which customers are located
-customers = [0, 4, 8]
+customers = [0, 1, 2, 3]
 
 # generate region defined by distances between sources & sinks
-distances = network.region_generator(200, n, customers)
+distances = network.region_generator(1000, n, customers)
 
 # specify product set for the value chain
 products = [
@@ -41,7 +45,6 @@ source_capacity = pd.DataFrame(s_values, columns=products, index=s_list)
 
 # specify demand of the product set [tons]
 demand = [0, 0, 0, 0, s_values.sum() / 20 / len(customers)]
-
 
 # specify market price of the product set [euro/ton]
 market_price = {
