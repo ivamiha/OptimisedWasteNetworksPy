@@ -1,4 +1,3 @@
-import pyscipopt as scip
 import gurobipy as gp
 import pandas as pd
 import matplotlib.pyplot as plt

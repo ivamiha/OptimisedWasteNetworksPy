@@ -9,7 +9,7 @@ import src.optimisation as optimisation
 
 
 # number of sources per side of region
-n = 5
+n = 6
 
 # define nodes on which customers are located
 customers = [0, 1, 2, 3]
@@ -31,7 +31,7 @@ products = [
 seed_value = 333242
 random.seed(seed_value)
 
-# specify product capacity at sources [tons]
+# specify product capacity at sources [tons/day]
 s_list, s_values = [], []
 for idx in range(0, n * n):
     s_list.append("S_" + str(idx))
@@ -43,7 +43,7 @@ for idx in range(0, n * n):
 s_values = np.array(s_values).reshape((n * n, len(products)))
 source_capacity = pd.DataFrame(s_values, columns=products, index=s_list)
 
-# specify demand of the product set [tons]
+# specify demand of the product set [tons/day]
 demand = [0, 0, 0, 0, s_values.sum() / 20 / len(customers)]
 
 # specify market price of the product set [euro/ton]
@@ -96,7 +96,9 @@ scenario.define_value_chain(
 scenario.model_value_chain()
 
 # solve the optimisation problem
-# scenario.model.solveConcurrent()
+scenario.model.Params.MIPFocus = 0
+scenario.model.Params.timelimit = 1000
+scenario.model.presolve()
 scenario.model.optimize()
 
 # process optimisation problem results
