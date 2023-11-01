@@ -2,31 +2,53 @@ import src.network as network
 import src.optimisation as optimisation
 import pandas as pd
 import numpy as np
-from geopy.geocoders import Nominatim
-
-
-# config Nominatim geolocator, user_agent is your IP address to limit API calls
-geolocator = Nominatim(user_agent="192.168.1.117")
+import utils.get_coords as gc
+import utils.convert_coords as cc
 
 # read region csv file containing sources
 region = pd.read_csv("data/DE_NUTS1.csv")
-# extract source coordinates and save them in a list
-sources = []
+# define country to which the region corresponds
+country = "Germany"
+
+# extract & process city coordinates, NOTE: comment out when data processed once
+cities = []
+distance = []
+x_distance = []
+y_distance = []
+country_coords = gc.get_country_coords(country)
+c_lat = country_coords[0]
+c_lng = country_coords[1]
 for _, row in region.iterrows():
-    city = geolocator.geocode(f"{row['Largest_city']}, Germany")
-    sources.append((city.latitude, city.longitude))
+    # obtain coordiantes of the current city
+    cities.append(row["Largest_city"])
+    city_coords = gc.get_city_coords(city=row["Largest_city"])
+    # calculate relevant distances of this city from the centre of the country
+    distance.append(cc.coords_to_distance(city_coords, (c_lat, c_lng)))
+    distances = cc.coords_to_distances(city_coords, (c_lat, c_lng))
+    x_distance.append(distances[0])
+    y_distance.append(distances[1])
+# create and save the ``city_distances`` dataframe as a csv file
+city_distances = {
+    "City": cities,
+    "Distance": distance,
+    "X_distance": x_distance,
+    "Y_distance": y_distance,
+}
+city_distances = pd.DataFrame(city_distances)
+city_distances.to_csv("data/city_distances.csv", float_format="%.3f")
 
-# create list with names of chemical parks of interest
-chemical_parks = ["Dormagen", "Brunsbüttel", "Stade"]
-# extract customer coordinates and save them in a list
-customers = []
-for name in chemical_parks:
-    city = geolocator.geocode(f"{name}, Germany")
-    customers.append((city.latitude, city.longitude))
+# generate the sources array of arrays containing x and y distances
+sources = []
+for _, row in city_distances.iterrows():
+    sources.append([row["X_distance"], row["Y_distance"]])
 
-img_path = "icons/DE.png"
-region_name = "Germany"
-distances = network.region_setup(sources, customers, img_path, region_name)
+# define problem customers by specifying indices w.r.t. sources array
+customers = [0, 8, 11]
+
+# generate region defined by distances between sources & sinks
+distances = network.region_builder(
+    sources, customers, country="Germany", img_path="icons/DE.png"
+)
 
 # specify product set for the value chain
 products = [
@@ -55,8 +77,7 @@ s_values = np.array(s_values).reshape((len(sources), len(products)))
 source_capacity = pd.DataFrame(s_values, columns=products, index=s_list)
 
 # specify demand of the product set [tons/day]
-# demand = [0, 0, 0, 0, 0, s_values.sum() / 20 / len(customers)]
-demand = [0, 0, 0, 0, 0, 10000000]
+demand = [0, 0, 0, 0, s_values.sum() / 20 / len(customers)]
 
 # specify market price of the product set [euro/ton]
 market_price = {
@@ -108,13 +129,15 @@ scenario.define_value_chain(
 scenario.model_value_chain()
 
 # solve the optimisation problem
+scenario.model.Params.MIPFocus = 0
+scenario.model.presolve()
 scenario.model.optimize()
 
 # process optimisation problem results
-# scenario.process_results()
+scenario.process_results()
 
 # plot resulting infrastructure
-# scenario.plot_resulting_infrastructure()
+scenario.plot_resulting_infrastructure(country="Germany", img_path="icons/DE.png")
 
 # plot resulting product flow
-# scenario.plot_resulting_product_flow()
+scenario.plot_resulting_product_flow(country="Germany", img_path="icons/DE.png")

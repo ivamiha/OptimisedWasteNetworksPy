@@ -9,7 +9,7 @@ import src.optimisation as optimisation
 
 
 # number of sources per side of region
-n = 6
+n = 4
 
 # define nodes on which customers are located
 customers = [0, 1, 2, 3]
@@ -27,7 +27,6 @@ products = [
 ]
 
 # set a seed for the random number generator
-# seed_value = 1734176512
 seed_value = 333242
 random.seed(seed_value)
 
@@ -97,7 +96,7 @@ scenario.model_value_chain()
 
 # solve the optimisation problem
 scenario.model.Params.MIPFocus = 0
-scenario.model.Params.timelimit = 1000
+scenario.model.Params.timelimit = 10000
 scenario.model.presolve()
 scenario.model.optimize()
 

@@ -3,6 +3,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.offsetbox as osb
 import matplotlib.lines as mlines
+import utils.get_coords as gc
+import utils.convert_coords as cc
 import re
 import math
 
@@ -197,7 +199,6 @@ class Infrastructure:
         """
 
         # initialise optimisation problem
-        # model = scip.Model("value_chain")
         model = gp.Model("value_chain")
 
         # initialise variables whose scope is this function
@@ -243,16 +244,16 @@ class Infrastructure:
                     )
         # OCF installation binary outcomes
         for j in self.OCF:
-            b[j] = model.addVar(vtype="INTEGER", name="b(%s)" % j)
+            b[j] = model.addVar(vtype="INTEGER", lb=0, name="b(%s)" % j)
         # MPF installation binary outcomes
         for k in self.MPF:
-            b[k] = model.addVar(vtype="INTEGER", name="b(%s)" % k)
+            b[k] = model.addVar(vtype="INTEGER", lb=0, name="b(%s)" % k)
         # CPF installation binary outcomes
         for l in self.CPF:
-            b[l] = model.addVar(vtype="INTEGER", name="b(%s)" % l)
+            b[l] = model.addVar(vtype="INTEGER", lb=0, name="b(%s)" % l)
         # DPF installation binary outcomes
         for m in self.DPF:
-            b[m] = model.addVar(vtype="INTEGER", name="b(%s)" % m)
+            b[m] = model.addVar(vtype="INTEGER", lb=0, name="b(%s)" % m)
 
         # add constraint for flow conservation at sources to the model
         for p in self.P:
@@ -413,8 +414,6 @@ class Infrastructure:
             ),
             gp.GRB.MAXIMIZE,
         )
-
-        # model.data = x, b
 
         self.x = x
         self.b = b
@@ -780,12 +779,22 @@ class Infrastructure:
         # save the ``self.product_flow`` DataFrame to a csv file
         self.product_flow.to_csv("product_flows.csv")
 
-    def plot_resulting_infrastructure(self):
+    def plot_resulting_infrastructure(self, country=None, img_path=None):
         """
         Create plot where the nodes are plotted as a scatter plot with the size
         of the node corresponding to the amount of waste sourced from it. The
         installed facilities (and the presence or lack of customers) is then
         indicated by icons which are used to annotate nodes on the plot.
+
+        Parameters
+        ----------
+        country (str): optional string containing name of the considered country
+        in english, used to obtain the country's centre and extremes (northmost
+        southmost, eastmost, westmost) for setting plot limits
+
+        img_path (str): optional string containing the location of the image
+        file which (if specified) will be used as a background for the generated
+        plot, REQUIRES ``country`` to be specified as well
 
         Notes
         -----
@@ -803,22 +812,55 @@ class Infrastructure:
         customers = pd.read_csv("coordinates_customers.csv")
         x_coords_c = customers["xcord"].to_list()
         y_coords_c = customers["ycord"].to_list()
+
+        # obtain plot limits using geocoder if ``country`` is specified
+        if country != None:
+            # obtain corresponding lats and lngs using Nominatim geocoder
+            centre = gc.get_country_coords(country)
+            bounding_box = gc.get_country_coords(country, output_as="boundingbox")
+            # calculate x and y distances to the bottom left and top right corners
+            bottom_left = cc.coords_to_distances(
+                (bounding_box[0], bounding_box[2]), (centre[0], centre[1])
+            )
+            top_right = cc.coords_to_distances(
+                (bounding_box[1], bounding_box[3]), (centre[0], centre[1])
+            )
+            # extract the required extents for the plot
+            x_min = bottom_left[0]
+            x_max = top_right[0]
+            y_min = bottom_left[1]
+            y_max = top_right[1]
+        # otherwise, obtain plot limits based on plotted data
+        else:
+            length_x = max(x_coords) - min(x_coords)
+            length_y = max(y_coords) - min(y_coords)
+
         # convert name_list of installed facilities into an int_list
         int_list_OCF = name_list_to_int_list(self.name_list_OCF)
         int_list_MPF = name_list_to_int_list(self.name_list_MPF)
         int_list_CPF = name_list_to_int_list(self.name_list_CPF)
         int_list_DPF = name_list_to_int_list(self.name_list_DPF)
+
         # use source row sums to create scatter plot with scaled source size
         fig, ax = plt.subplots(figsize=(8, 8))
         factor = int(300 / max(source_cap_row_sums))
         size = [factor * val for val in source_cap_row_sums]
-        ax.scatter(x_coords, y_coords, c="k", s=size)
+        ax.scatter(x_coords, y_coords, c="k", s=size, zorder=1)
         ax.set_xlabel("Horizontal distance [km]")
         ax.set_ylabel("Vertical distance [km]")
-        ax.set_xlim(-max(x_coords) * 0.3, max(x_coords) * 1.3)
-        ax.set_ylim(-max(y_coords) * 0.3, max(y_coords) * 1.3)
+        # set corresponding limits to the plot
+        if country != None:
+            ax.set_xlim(x_min * 1.2, x_max * 1.2)
+            ax.set_ylim(y_min * 1.2, y_max * 1.2)
+        else:
+            ax.set_xlim(min(x_coords) - length_x * 0.2, max(x_coords) + length_x * 0.2)
+            ax.set_ylim(min(y_coords) - length_y * 0.2, max(y_coords) + length_y * 0.2)
+        # set background image if ``img_path`` has been provided
+        if img_path != None and country != None:
+            background_img = plt.imread(img_path)
+            ax.imshow(background_img, zorder=0, extent=[x_min, x_max, y_min, y_max])
         # chosen offset for annotation from the node
-        offset = max(25, self.source_cap.values.max() / 30)
+        offset = max(20, self.source_cap.values.max() / 60)
         # annotate nodes where OCFs have been installed
         imagebox = osb.OffsetImage(plt.imread("icons/OCF.png"), zoom=0.03)
         for value in int_list_OCF:
@@ -878,7 +920,7 @@ class Infrastructure:
         fig.savefig("results_infrastructure.pdf", dpi=1200)
         plt.show()
 
-    def plot_resulting_product_flow(self):
+    def plot_resulting_product_flow(self, country=None, img_path=None):
         """
         Create a plot where product flows are plotted between nodes represented
         by a scatter plot. The nodes of the scatter plot are scaled according to
@@ -887,6 +929,16 @@ class Infrastructure:
         The lines and nodes are colour and shape coded according to the
         facilities installed at the node and the type of material being
         transported.
+
+        Parameters
+        ----------
+        country (str): optional string containing name of the considered country
+        in english, used to obtain the country's centre and extremes (northmost
+        southmost, eastmost, westmost) for setting plot limits
+
+        img_path (str): optional string containing the location of the image
+        file which (if specified) will be used as a background for the generated
+        plot, REQUIRES ``country`` to be specified as well
 
         Notes
         -----
@@ -903,12 +955,44 @@ class Infrastructure:
         sources = pd.read_csv("coordinates_sources.csv")
         x_coords = sources["xcord"].to_list()
         y_coords = sources["ycord"].to_list()
+
+        # obtain plot limits using geocoder if ``country`` is specified
+        if country != None:
+            # obtain corresponding lats and lngs using Nominatim geocoder
+            centre = gc.get_country_coords(country)
+            bounding_box = gc.get_country_coords(country, output_as="boundingbox")
+            # calculate x and y distances to the bottom left and top right corners
+            bottom_left = cc.coords_to_distances(
+                (bounding_box[0], bounding_box[2]), (centre[0], centre[1])
+            )
+            top_right = cc.coords_to_distances(
+                (bounding_box[1], bounding_box[3]), (centre[0], centre[1])
+            )
+            # extract the required extents for the plot
+            x_min = bottom_left[0]
+            x_max = top_right[0]
+            y_min = bottom_left[1]
+            y_max = top_right[1]
+        # otherwise, obtain plot limits based on plotted data
+        else:
+            length_x = max(x_coords) - min(x_coords)
+            length_y = max(y_coords) - min(y_coords)
+
         # create the figure and define axis labels and limits
         fig, ax = plt.subplots(figsize=(8, 8))
         ax.set_xlabel("Horizontal distance [km]")
         ax.set_ylabel("Vertical distance [km]")
-        ax.set_xlim(-max(x_coords) * 0.2, max(x_coords) * 1.2)
-        ax.set_ylim(-max(y_coords) * 0.2, max(y_coords) * 1.4)
+        # set corresponding limits to the plot
+        if country != None:
+            ax.set_xlim(x_min * 1.2, x_max * 1.2)
+            ax.set_ylim(y_min * 1.2, y_max * 1.5)
+        else:
+            ax.set_xlim(min(x_coords) - length_x * 0.2, max(x_coords) + length_x * 0.2)
+            ax.set_ylim(min(y_coords) - length_y * 0.2, max(y_coords) + length_y * 0.5)
+        # set background image if ``img_path`` has been provided
+        if img_path != None and country != None:
+            background_img = plt.imread(img_path)
+            ax.imshow(background_img, zorder=0, extent=[x_min, x_max, y_min, y_max])
         # draw lines representing exchanged products
         product_flows = pd.read_csv("product_flows.csv")
         for _, row in product_flows.iterrows():
@@ -947,6 +1031,7 @@ class Infrastructure:
                     arrowprops=dict(
                         arrowstyle="->", lw=2, color=colour, mutation_scale=25
                     ),
+                    zorder=1,
                 )
         # convert name_list of installed facilities into an int_list
         int_list_OCF = name_list_to_int_list(self.name_list_OCF)
