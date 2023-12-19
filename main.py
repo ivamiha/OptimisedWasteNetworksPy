@@ -126,7 +126,7 @@ scenario.define_value_chain(
 )
 
 # create optimisation model of the value chain
-scenario.model_value_chain()
+scenario.model_value_chain(objective="environmental")
 
 # solve the optimisation problem
 scenario.model.Params.MIPFocus = 0

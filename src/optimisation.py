@@ -7,6 +7,7 @@ import utils.get_coords as gc
 import utils.convert_coords as cc
 import re
 import math
+import sys
 
 
 class Infrastructure:
@@ -15,13 +16,14 @@ class Infrastructure:
     up the optimisation problem utilising pyscipopt
     """
 
-    # define class variables
+    # define transportation physical variables
     max_load = 20  # maximum load for big roll-off [tons]
     max_volume = 99  # maximum volume for big roll-off [m^3]
     max_load_small = 6  # maximum load for small roll-off [tons]
     max_volume_small = 33  # maximum volume for small roll-off [m^3]
     max_volume_small_tanker = 30  # maximum volume for small steel tanker [m^3]
     max_volume_large_tanker = 45  # maximum volume for large steel tanker [m^3]
+    # define transportation cost variables
     fuel_cons = 0.4  # fuel consumption [lt/km]
     fuel_price = 1.79  # fuel price [euro/lt]
     toll_cost = 0.198  # toll cost [euro/km]
@@ -31,18 +33,34 @@ class Infrastructure:
     vehicle_cost = 30000 / (15 * 360 * 90 / 14)  # large roll-off [euro/h]
     vehicle_cost_small = 10000 / (15 * 360 * 90 / 14)  # small roll-off [euro/h]
     vehicle_cost_tanker = 50000 / (15 * 360 * 90 / 14)  # steel tanker [euro/h]
+    # define physical variables
     rho_ETICS = 0.014  # density of ETICS [ton/m^3]
     rho_compressed_ETICS = 0.14  # density of compressed ETICS [ton/m^3]
     rho_pre_concentrate = 0.35  # density of pre-concentrate [ton/m^3]
     rho_pyrolysis_oil = 0.80  # density of pyrolysis oil [ton/m^3]
     rho_styrene = 0.910  # density of styrene [ton/m^3]
     max_time = 100  # maximum transportation between facilities [hours]
+    # define economic variables
     variable_OCF = 11  # operational costs of OCF [euro/ton]
     variable_MPF = 46  # operational cost of MPF [euro/ton]
     variable_CPF = 44  # operational cost of CPF [euro/ton]
     variable_DPF = 100  # operational cost of DPF [euro/ton]
     period = 10  # loan period [years]
     rate = 0.1
+    # define environmental variables
+    TI_ETICS = 1  # transportation impact of ETICS [CO2e/(km*ton)]
+    TI_comp_ETICS = 1  # trans. impact of compressed ETICS [CO2e/(km*ton)]
+    TI_pre_concentrate = 1  # trans. impact of pre concentrate [CO2e/(km*ton)]
+    TI_pyrolysis_oil = 1  # trans. impact of pyrolysis oil [CO2e/(km*ton)]
+    TI_styrene = 1  # trans. impact of styrene [CO2e/(km*ton)]
+    CI_OCF = 1  # construction impact of OCF [CO2e/ton]
+    CI_MPF = 1  # construction impact of MPF [CO2e/ton]
+    CI_CPF = 1  # construction impact of CPF [CO2e/ton]
+    CI_DPF = 1  # construction impact of DPF [CO2e/ton]
+    OI_OCF = 1  # operational impact of OCF [CO2e/ton]
+    OI_MPF = 1  # operational impact of MPF [CO2e/ton]
+    OI_CPF = 1  # operational impact of CPF [CO2e/ton]
+    OI_DPF = 1  # operational impact of DPF [CO2e/ton]
 
     def __init__(self, D1, D2, D3, D4, D5):
         """
@@ -192,10 +210,15 @@ class Infrastructure:
             / self.avg_speed
         ) / (self.max_volume_large_tanker * self.rho_styrene)
 
-    def model_value_chain(self):
+    def model_value_chain(self, objective):
         """
         Create optimisation model for the defined value chain utilising the
         SCIPT solver
+
+        Parameters
+        ----------
+        objective (string): objective function used in the optimisation problem,
+        accepts either ``economic`` or ``environmental`` objectives
         """
 
         # initialise optimisation problem
@@ -346,74 +369,134 @@ class Infrastructure:
                 )
 
         # add objective function to the model
-        model.setObjective(
-            gp.quicksum(
-                self.market_price[p]
-                * gp.quicksum(x[p, m, n] for m in self.DPF for n in self.C)
-                for p in self.P
-            )
-            - (
-                gp.quicksum(self.fixed_OCF * b[j] for j in self.OCF)
-                + gp.quicksum(self.fixed_MPF * b[k] for k in self.MPF)
-                + gp.quicksum(self.fixed_CPF * b[l] for l in self.CPF)
-                + gp.quicksum(self.fixed_DPF * b[m] for m in self.DPF)
-            )
-            - (
+        if objective == "economic":
+            model.setObjective(
                 gp.quicksum(
-                    self.variable_OCF
+                    self.market_price[p]
+                    * gp.quicksum(x[p, m, n] for m in self.DPF for n in self.C)
+                    for p in self.P
+                )
+                - (
+                    gp.quicksum(self.fixed_OCF * b[j] for j in self.OCF)
+                    + gp.quicksum(self.fixed_MPF * b[k] for k in self.MPF)
+                    + gp.quicksum(self.fixed_CPF * b[l] for l in self.CPF)
+                    + gp.quicksum(self.fixed_DPF * b[m] for m in self.DPF)
+                )
+                - (
+                    gp.quicksum(
+                        self.variable_OCF
+                        * gp.quicksum(x[p, i, j] for i in self.S for p in self.P)
+                        for j in self.OCF
+                    )
+                    + gp.quicksum(
+                        self.variable_MPF
+                        * gp.quicksum(x[p, j, k] for j in self.OCF for p in self.P)
+                        for k in self.MPF
+                    )
+                    + gp.quicksum(
+                        self.variable_CPF
+                        * gp.quicksum(x[p, k, l] for k in self.MPF for p in self.P)
+                        for l in self.CPF
+                    )
+                    + gp.quicksum(
+                        self.variable_DPF
+                        * gp.quicksum(x[p, l, m] for l in self.CPF for p in self.P)
+                        for m in self.DPF
+                    )
+                )
+                - (
+                    gp.quicksum(
+                        2 * self.D1.loc[i, j] * self.TC_ETICS * x[p, i, j]
+                        for i in self.S
+                        for j in self.OCF
+                        for p in self.P
+                    )
+                    + gp.quicksum(
+                        2 * self.D2.loc[j, k] * self.TC_comp_ETICS * x[p, j, k]
+                        for j in self.OCF
+                        for k in self.MPF
+                        for p in self.P
+                    )
+                    + gp.quicksum(
+                        2 * self.D3.loc[k, l] * self.TC_pre_concentrate * x[p, k, l]
+                        for k in self.MPF
+                        for l in self.CPF
+                        for p in self.P
+                    )
+                    + gp.quicksum(
+                        2 * self.D4.loc[l, m] * self.TC_pyrolysis_oil * x[p, l, m]
+                        for l in self.CPF
+                        for m in self.DPF
+                        for p in self.P
+                    )
+                    + gp.quicksum(
+                        2 * self.D5.loc[m, n] * self.TC_styrene * x[p, m, n]
+                        for m in self.DPF
+                        for n in self.C
+                        for p in self.P
+                    )
+                ),
+                gp.GRB.MAXIMIZE,
+            )
+        elif objective == "environmental":
+            model.setObjective(
+                gp.quicksum(
+                    (self.CI_OCF + self.OI_OCF)
                     * gp.quicksum(x[p, i, j] for i in self.S for p in self.P)
                     for j in self.OCF
                 )
                 + gp.quicksum(
-                    self.variable_MPF
+                    (self.CI_MPF + self.OI_MPF)
                     * gp.quicksum(x[p, j, k] for j in self.OCF for p in self.P)
                     for k in self.MPF
                 )
                 + gp.quicksum(
-                    self.variable_CPF
+                    (self.CI_CPF + self.OI_CPF)
                     * gp.quicksum(x[p, k, l] for k in self.MPF for p in self.P)
                     for l in self.CPF
                 )
                 + gp.quicksum(
-                    self.variable_DPF
+                    (self.CI_DPF + self.OI_DPF)
                     * gp.quicksum(x[p, l, m] for l in self.CPF for p in self.P)
                     for m in self.DPF
                 )
-            )
-            - (
-                gp.quicksum(
-                    2 * self.D1.loc[i, j] * self.TC_ETICS * x[p, i, j]
+                + gp.quicksum(
+                    2 * self.D1.loc[i, j] * self.TI_ETICS * x[p, i, j]
                     for i in self.S
                     for j in self.OCF
                     for p in self.P
                 )
                 + gp.quicksum(
-                    2 * self.D2.loc[j, k] * self.TC_comp_ETICS * x[p, j, k]
+                    2 * self.D2.loc[j, k] * self.TI_comp_ETICS * x[p, j, k]
                     for j in self.OCF
                     for k in self.MPF
                     for p in self.P
                 )
                 + gp.quicksum(
-                    2 * self.D3.loc[k, l] * self.TC_pre_concentrate * x[p, k, l]
+                    2 * self.D3.loc[k, l] * self.TI_pre_concentrate * x[p, k, l]
                     for k in self.MPF
                     for l in self.CPF
                     for p in self.P
                 )
                 + gp.quicksum(
-                    2 * self.D4.loc[l, m] * self.TC_pyrolysis_oil * x[p, l, m]
+                    2 * self.D4.loc[l, m] * self.TI_pyrolysis_oil * x[p, l, m]
                     for l in self.CPF
                     for m in self.DPF
                     for p in self.P
                 )
                 + gp.quicksum(
-                    2 * self.D5.loc[m, n] * self.TC_styrene * x[p, m, n]
+                    2 * self.D5.loc[m, n] * self.TI_styrene * x[p, m, n]
                     for m in self.DPF
                     for n in self.C
                     for p in self.P
                 )
-            ),
-            gp.GRB.MAXIMIZE,
-        )
+            )
+        else:
+            print("SPECIFIED OBJECTIVE FUNCTION WAS NOT IDENTIFIED.")
+            print(
+                "Please ensure that either ``economic`` or ``environmental`` objectives are used."
+            )
+            sys.exit()
 
         self.x = x
         self.b = b
