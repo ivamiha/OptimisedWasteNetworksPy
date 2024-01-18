@@ -7,7 +7,10 @@ import utils.get_coords as gc
 import utils.convert_coords as cc
 import re
 import math
-import sys
+import numpy as np
+import seaborn as sns
+import matplotlib.colors as clr
+import subprocess
 
 
 class Infrastructure:
@@ -17,12 +20,9 @@ class Infrastructure:
     """
 
     # define transportation physical variables
-    max_load = 20  # maximum load for big roll-off [tons]
-    max_volume = 99  # maximum volume for big roll-off [m^3]
-    max_load_small = 6  # maximum load for small roll-off [tons]
-    max_volume_small = 33  # maximum volume for small roll-off [m^3]
-    max_volume_small_tanker = 30  # maximum volume for small steel tanker [m^3]
-    max_volume_large_tanker = 45  # maximum volume for large steel tanker [m^3]
+    rolloff_load = 6  # maximum load for a roll-off [tons]
+    rolloff_volume = 33  # maximum volume for a roll-off [m^3]
+    tanker_volume = 45  # maximum volume for steel tanker [m^3]
     # define transportation cost variables
     fuel_cons = 0.4  # fuel consumption [lt/km]
     fuel_price = 1.79  # fuel price [euro/lt]
@@ -47,20 +47,19 @@ class Infrastructure:
     variable_DPF = 100  # operational cost of DPF [euro/ton]
     period = 10  # loan period [years]
     rate = 0.1
-    # define environmental variables
-    TI_ETICS = 1  # transportation impact of ETICS [CO2e/(km*ton)]
-    TI_comp_ETICS = 1  # trans. impact of compressed ETICS [CO2e/(km*ton)]
-    TI_pre_concentrate = 1  # trans. impact of pre concentrate [CO2e/(km*ton)]
-    TI_pyrolysis_oil = 1  # trans. impact of pyrolysis oil [CO2e/(km*ton)]
-    TI_styrene = 1  # trans. impact of styrene [CO2e/(km*ton)]
-    CI_OCF = 1  # construction impact of OCF [CO2e/ton]
-    CI_MPF = 1  # construction impact of MPF [CO2e/ton]
-    CI_CPF = 1  # construction impact of CPF [CO2e/ton]
-    CI_DPF = 1  # construction impact of DPF [CO2e/ton]
-    OI_OCF = 1  # operational impact of OCF [CO2e/ton]
-    OI_MPF = 1  # operational impact of MPF [CO2e/ton]
-    OI_CPF = 1  # operational impact of CPF [CO2e/ton]
-    OI_DPF = 1  # operational impact of DPF [CO2e/ton]
+    # define environmental impact variables
+    env_rolloff = 2.476e-01  # environmental impact of roll-off [tons CO2e/km]
+    env_tanker = 1.105e-01  # environmental impact of tanker [tons CO2e/km]
+    CI_OCF = 4.463e-03  # construction impact of mech. plant [tons CO2e/ton]
+    CI_MPF = 4.463e-03  # construction impact of mech. plant [tons CO2e/ton]
+    CI_CPF = 0.651  # construction impact of chem. plant [tons CO2e/ton]
+    CI_DPF = 2.813e-02  # construction impact of chem. plant [tons CO2e/ton]
+    OI_OCF = 1.246e-2  # operational impact of OCF [CO2e/ton]
+    OI_MPF = 3.116e-2  # operational impact of MPF [CO2e/ton]
+    OI_CPF = 1.100  # operational impact of CPF [tons CO2e/ton]
+    OI_DPF = 2.055  # operational impact of DPF [tons CO2e/ton]
+    # define estimated price of CO2
+    env_cost = 170  # cost of the environmental impact [euro/ton CO2e]
 
     def __init__(self, D1, D2, D3, D4, D5):
         """
@@ -179,46 +178,70 @@ class Infrastructure:
         )
 
         # calculate transportation costs [euro/(km*ton)]
-        # assume volume is the limiting factor for ETICS, large roll-off
+        # assume volume is limiting factor for ETICS in roll-off
         self.TC_ETICS = (
             (self.fuel_price * self.fuel_cons + self.toll_cost)
             + (self.driver_wage / self.driver_hours + self.vehicle_cost)
             / self.avg_speed
-        ) / (self.max_volume * self.rho_ETICS)
-        # assume load is limiting factor for compressed ETICS, large roll-off
+        ) / (self.rolloff_volume * self.rho_ETICS)
+        # assume load is limiting factor for compressed ETICS in roll-off
         self.TC_comp_ETICS = (
             (self.fuel_price * self.fuel_cons + self.toll_cost)
             + (self.driver_wage / self.driver_hours + self.vehicle_cost)
             / self.avg_speed
-        ) / self.max_load
-        # assume load is limiting factor for pre-concentrate, large roll-off
+        ) / self.rolloff_load
+        # assume load is limiting factor for pre-concentrate in roll-off
         self.TC_pre_concentrate = (
             (self.fuel_price * self.fuel_cons + self.toll_cost)
             + (self.driver_wage / self.driver_hours + self.vehicle_cost_tanker)
             / self.avg_speed
-        ) / self.max_load
-        # assume volume is limiting factor pyrolysis oil, using large tanker
+        ) / self.rolloff_load
+        # assume volume is limiting factor pyrolysis oil in steel tanker
         self.TC_pyrolysis_oil = (
             (self.fuel_price * self.fuel_cons + self.toll_cost)
             + (self.driver_wage / self.driver_hours + self.vehicle_cost_tanker)
             / self.avg_speed
-        ) / (self.max_volume_large_tanker * self.rho_pyrolysis_oil)
-        # assume volume is limiting factor for styrene, using large tanker
+        ) / (self.tanker_volume * self.rho_pyrolysis_oil)
+        # assume volume is limiting factor for styrene in steel tanker
         self.TC_styrene = (
             (self.fuel_price * self.fuel_cons + self.toll_cost)
             + (self.driver_wage / self.driver_hours + self.vehicle_cost)
             / self.avg_speed
-        ) / (self.max_volume_large_tanker * self.rho_styrene)
+        ) / (self.tanker_volume * self.rho_styrene)
 
-    def model_value_chain(self, objective):
+        # calculate transportation environmental impact [tons CO2-eq/(km*ton)]
+        # assume volume is limiting factor for ETICS in roll-off
+        self.TI_ETICS = self.env_rolloff / (self.rolloff_volume * self.rho_ETICS)
+        # assume load is limiting factor for compressed ETICS in roll-off
+        self.TI_comp_ETICS = self.env_rolloff / self.rolloff_load
+        # assume load is limiting factor for pre-concentrate in roll-off
+        self.TI_pre_concentrate = self.env_rolloff / self.rolloff_load
+        # assume volume is limiting factor for pyrolysis oil in steel tanker
+        self.TI_pyrolysis_oil = self.env_tanker / (
+            self.tanker_volume * self.rho_pyrolysis_oil
+        )
+        # assume volume is limiting factor for styrene in steel tanker
+        self.TI_styrene = self.env_tanker / (self.tanker_volume * self.rho_styrene)
+
+    def model_value_chain(self, weight_economic, weight_environmental):
         """
-        Create optimisation model for the defined value chain utilising the
-        SCIPT solver
+        Utilise gurobipy to define a multi-objective optimisation model for the
+        user-defined value chain. The model is defined using gurobipy's blended
+        multi-bojective functions. See note below for more information regarding
+        how the weights work.
 
         Parameters
         ----------
-        objective (string): objective function used in the optimisation problem,
-        accepts either ``economic`` or ``environmental`` objectives
+        weight_economic (int): weight corresponding to the economic objective
+        function
+
+        weight_environmental (int): weight corresponding to the environmental
+        objective function
+
+        NOTE: the resulting multi-objective function will be a linear
+        combination of the individual objective functions multiplied by their
+        corresponding weights, i.e.: weight_economic * obj_economic +
+        weight_environmental * obj_environmental
         """
 
         # initialise optimisation problem
@@ -357,7 +380,6 @@ class Infrastructure:
                 )
 
         # add driving time constraint for OCFs to the model
-        # NOTE: this is a new constraint not mentioned in the paper
         for i in self.S:
             for j in self.OCF:
                 model.addConstr(
@@ -368,78 +390,87 @@ class Infrastructure:
                     name="Travel Time(%s,%s)" % (j, i),
                 )
 
-        # add objective function to the model
-        if objective == "economic":
-            model.setObjective(
+        # set Gurobi to maximize all objective functions
+        model.ModelSense = gp.GRB.MAXIMIZE
+
+        # add economic objective to the model (maximize)
+        model.setObjectiveN(
+            gp.quicksum(
+                self.market_price[p]
+                * gp.quicksum(x[p, m, n] for m in self.DPF for n in self.C)
+                for p in self.P
+            )
+            - (
+                gp.quicksum(self.fixed_OCF * b[j] for j in self.OCF)
+                + gp.quicksum(self.fixed_MPF * b[k] for k in self.MPF)
+                + gp.quicksum(self.fixed_CPF * b[l] for l in self.CPF)
+                + gp.quicksum(self.fixed_DPF * b[m] for m in self.DPF)
+            )
+            - (
                 gp.quicksum(
-                    self.market_price[p]
-                    * gp.quicksum(x[p, m, n] for m in self.DPF for n in self.C)
+                    self.variable_OCF
+                    * gp.quicksum(x[p, i, j] for i in self.S for p in self.P)
+                    for j in self.OCF
+                )
+                + gp.quicksum(
+                    self.variable_MPF
+                    * gp.quicksum(x[p, j, k] for j in self.OCF for p in self.P)
+                    for k in self.MPF
+                )
+                + gp.quicksum(
+                    self.variable_CPF
+                    * gp.quicksum(x[p, k, l] for k in self.MPF for p in self.P)
+                    for l in self.CPF
+                )
+                + gp.quicksum(
+                    self.variable_DPF
+                    * gp.quicksum(x[p, l, m] for l in self.CPF for p in self.P)
+                    for m in self.DPF
+                )
+            )
+            - (
+                gp.quicksum(
+                    2 * self.D1.loc[i, j] * self.TC_ETICS * x[p, i, j]
+                    for i in self.S
+                    for j in self.OCF
                     for p in self.P
                 )
-                - (
-                    gp.quicksum(self.fixed_OCF * b[j] for j in self.OCF)
-                    + gp.quicksum(self.fixed_MPF * b[k] for k in self.MPF)
-                    + gp.quicksum(self.fixed_CPF * b[l] for l in self.CPF)
-                    + gp.quicksum(self.fixed_DPF * b[m] for m in self.DPF)
+                + gp.quicksum(
+                    2 * self.D2.loc[j, k] * self.TC_comp_ETICS * x[p, j, k]
+                    for j in self.OCF
+                    for k in self.MPF
+                    for p in self.P
                 )
-                - (
-                    gp.quicksum(
-                        self.variable_OCF
-                        * gp.quicksum(x[p, i, j] for i in self.S for p in self.P)
-                        for j in self.OCF
-                    )
-                    + gp.quicksum(
-                        self.variable_MPF
-                        * gp.quicksum(x[p, j, k] for j in self.OCF for p in self.P)
-                        for k in self.MPF
-                    )
-                    + gp.quicksum(
-                        self.variable_CPF
-                        * gp.quicksum(x[p, k, l] for k in self.MPF for p in self.P)
-                        for l in self.CPF
-                    )
-                    + gp.quicksum(
-                        self.variable_DPF
-                        * gp.quicksum(x[p, l, m] for l in self.CPF for p in self.P)
-                        for m in self.DPF
-                    )
+                + gp.quicksum(
+                    2 * self.D3.loc[k, l] * self.TC_pre_concentrate * x[p, k, l]
+                    for k in self.MPF
+                    for l in self.CPF
+                    for p in self.P
                 )
-                - (
-                    gp.quicksum(
-                        2 * self.D1.loc[i, j] * self.TC_ETICS * x[p, i, j]
-                        for i in self.S
-                        for j in self.OCF
-                        for p in self.P
-                    )
-                    + gp.quicksum(
-                        2 * self.D2.loc[j, k] * self.TC_comp_ETICS * x[p, j, k]
-                        for j in self.OCF
-                        for k in self.MPF
-                        for p in self.P
-                    )
-                    + gp.quicksum(
-                        2 * self.D3.loc[k, l] * self.TC_pre_concentrate * x[p, k, l]
-                        for k in self.MPF
-                        for l in self.CPF
-                        for p in self.P
-                    )
-                    + gp.quicksum(
-                        2 * self.D4.loc[l, m] * self.TC_pyrolysis_oil * x[p, l, m]
-                        for l in self.CPF
-                        for m in self.DPF
-                        for p in self.P
-                    )
-                    + gp.quicksum(
-                        2 * self.D5.loc[m, n] * self.TC_styrene * x[p, m, n]
-                        for m in self.DPF
-                        for n in self.C
-                        for p in self.P
-                    )
-                ),
-                gp.GRB.MAXIMIZE,
-            )
-        elif objective == "environmental":
-            model.setObjective(
+                + gp.quicksum(
+                    2 * self.D4.loc[l, m] * self.TC_pyrolysis_oil * x[p, l, m]
+                    for l in self.CPF
+                    for m in self.DPF
+                    for p in self.P
+                )
+                + gp.quicksum(
+                    2 * self.D5.loc[m, n] * self.TC_styrene * x[p, m, n]
+                    for m in self.DPF
+                    for n in self.C
+                    for p in self.P
+                )
+            ),
+            0,
+            weight=weight_economic,
+            name="obj_economic",
+        )
+
+        # add environmental objective to the model (minimize = -1 * maximize)
+        # NOTE: convert to estimated economic cost so blended MOO works
+        model.setObjectiveN(
+            -1
+            * self.env_cost
+            * (
                 gp.quicksum(
                     (self.CI_OCF + self.OI_OCF)
                     * gp.quicksum(x[p, i, j] for i in self.S for p in self.P)
@@ -490,13 +521,11 @@ class Infrastructure:
                     for n in self.C
                     for p in self.P
                 )
-            )
-        else:
-            print("SPECIFIED OBJECTIVE FUNCTION WAS NOT IDENTIFIED.")
-            print(
-                "Please ensure that either ``economic`` or ``environmental`` objectives are used."
-            )
-            sys.exit()
+            ),
+            1,
+            weight=weight_environmental,
+            name="obj_environmental",
+        )
 
         self.x = x
         self.b = b
@@ -504,9 +533,10 @@ class Infrastructure:
 
     def process_results(self):
         """
-        Process results for the optimisation problem. This function prints out
-        key characteristics of the obtained optimised infrastructure. The
-        infrastructure is also plotted for visual inspection.
+        Process results for the optimised solution. This function accesses
+        solution variables and computes other relevant secondary variables.
+        NOTE: this function MUST be called if any further post-processing of the
+        results is to be done.
         """
 
         # extract resulting variable values and store them in a dictionary
@@ -514,38 +544,36 @@ class Infrastructure:
         for var in self.model.getVars():
             vars[f"{var.varName}"] = var.x
 
-        # access solution and print value for objective function (profit)
-        self.OBJ = self.model.getObjective().getValue()
-        print("\n-------------------------------------------------------------")
-        print("Objective Value (Net Profit) = {:.2f} euro/day".format(self.OBJ))
+        # access and store both objective functions (profit & environmental
+        # impact expressed as an economic cost)
+        self.obj_economic = self.model.getObjective(0).getValue()
+        self.obj_environmental = -1 * self.model.getObjective(1).getValue()
 
-        # create empty DataFrame ``product_flow`` to which data regarding the
-        # flow of products between facilities will be written
+        # create ``product_flow`` df for products flowing between facilities
         columns = ["Origin", "Destination", "Product", "Amount"]
         self.product_flow = pd.DataFrame(columns=columns)
 
+        # calculate and store the demand satisfaction
+        demand_satisfaction = {}
+        for p in self.P:
+            for n in self.C:
+                demand_satisfaction[(p, n)] = sum(
+                    vars[f"x({p},{m},{n})"] for m in self.DPF
+                )
+        self.demand_satisfaction = demand_satisfaction
+
+        # calculate and store the revenue
+        self.Revenue = sum(
+            sum(self.market_price[p] * self.demand_satisfaction[(p, n)] for n in self.C)
+            for p in self.P
+        )
+
         # process data related to installed OCFs
         name_list_OCF = []
-        print("\n-------------------------------------------------------------")
-        print("Optional Compacting Facilities")
         for j in self.OCF:
             if vars[f"b({j})"] > 0.5:
-                print("{} = {:.2f}".format(j, vars[f"b({j})"]))
                 name_list_OCF.append(j)
-                print(
-                    "Total inflow to {} is {:.2f}".format(
-                        j,
-                        sum(vars[f"x({p},{i},{j})"] for i in self.S for p in self.P),
-                    )
-                )
-                print(
-                    "Capacity utilization of {} is {:.2f}%".format(
-                        j,
-                        sum(vars[f"x({p},{i},{j})"] for i in self.S for p in self.P)
-                        / self.facility_cap["OCF"]
-                        * 100,
-                    )
-                )
+            # add inflowing products to product_flow
             for p in self.P:
                 for i in self.S:
                     if vars[f"x({p},{i},{j})"] > 0.001:
@@ -561,36 +589,12 @@ class Infrastructure:
                         )
         self.name_list_OCF = name_list_OCF
 
-        # print out installed OCFs
-        print(
-            "Total number of optional compacting facilities = {:.2f}".format(
-                sum(vars[f"b({j})"] for j in self.OCF)
-            )
-        )
-        print("List of optional compacting facilities:", self.name_list_OCF)
-
         # process data related to installed MPFs
         name_list_MPF = []
-        print("\n-------------------------------------------------------------")
-        print("Mechanical Preprocessing Facilities")
         for k in self.MPF:
             if vars[f"b({k})"] > 0.5:
-                print("{} = {:.2f}".format(k, vars[f"b({k})"]))
                 name_list_MPF.append(k)
-                print(
-                    "Total inflow to {} is {:.2f}".format(
-                        k,
-                        sum(vars[f"x({p},{j},{k})"] for j in self.OCF for p in self.P),
-                    )
-                )
-                print(
-                    "Capacity utilization of {} is {:.2f}%".format(
-                        k,
-                        sum(vars[f"x({p},{j},{k})"] for j in self.OCF for p in self.P)
-                        / self.facility_cap["MPF"]
-                        * 100,
-                    )
-                )
+            # add inflowing products to product_flow
             for p in self.P:
                 for j in self.OCF:
                     if vars[f"x({p},{j},{k})"] > 0.001:
@@ -606,36 +610,12 @@ class Infrastructure:
                         )
         self.name_list_MPF = name_list_MPF
 
-        # print installed MPFs
-        print(
-            "Total number of mechanical preprocessing facilities = {:.2f}".format(
-                sum(vars[f"b({k})"] for k in self.MPF)
-            )
-        )
-        print("List of mechanical preprocessing facilities:", self.name_list_MPF)
-
         # process data related to installed CPFs
         name_list_CPF = []
-        print("\n-------------------------------------------------------------")
-        print("Chemical Processing Facilities")
         for l in self.CPF:
             if vars[f"b({l})"] > 0.5:
-                print("{} = {:.2f}".format(l, vars[f"b({l})"]))
                 name_list_CPF.append(l)
-                print(
-                    "Total inflow to {} is {:.2f}".format(
-                        l,
-                        sum(vars[f"x({p},{k},{l})"] for k in self.MPF for p in self.P),
-                    )
-                )
-                print(
-                    "Capacity utilization of {} is {:.2f}%".format(
-                        l,
-                        sum(vars[f"x({p},{k},{l})"] for k in self.MPF for p in self.P)
-                        / self.facility_cap["CPF"]
-                        * 100,
-                    )
-                )
+            # add inflowing products to product_flow
             for p in self.P:
                 for k in self.MPF:
                     if vars[f"x({p},{k},{l})"] > 0.001:
@@ -651,37 +631,14 @@ class Infrastructure:
                         )
         self.name_list_CPF = name_list_CPF
 
-        # print installed CPFs
-        print(
-            "Total number of chemical processing facilities = {:.2f}".format(
-                sum(vars[f"b({l})"] for l in self.CPF)
-            )
-        )
-        print("List of chemical processing facilities:", self.name_list_CPF)
-
         # process data related to installed DPFs
         name_list_DPF = []
-        print("\n-------------------------------------------------------------")
-        print("Downstream Processing Facilities")
         for m in self.DPF:
             if vars[f"b({m})"] > 0.5:
-                print("{} = {:.2f}".format(m, vars[f"b({m})"]))
                 name_list_DPF.append(m)
-                print(
-                    "Total inflow to {} is {:.2f}".format(
-                        m,
-                        sum(vars[f"x({p},{l},{m})"] for l in self.CPF for p in self.P),
-                    )
-                )
-                print(
-                    "Capacity utilization of {} is {:.2f}%".format(
-                        m,
-                        sum(vars[f"x({p},{l},{m})"] for l in self.CPF for p in self.P)
-                        / self.facility_cap["DPF"]
-                        * 100,
-                    )
-                )
+            # add inflowing & outflowing products to product flow
             for p in self.P:
+                # inflowing products
                 for l in self.CPF:
                     if vars[f"x({p},{l},{m})"] > 0.001:
                         # append flow data from l to m to DataFrame
@@ -694,9 +651,7 @@ class Infrastructure:
                         self.product_flow = self.product_flow._append(
                             new_data, ignore_index=True
                         )
-
-        for m in self.DPF:
-            for p in self.P:
+                # outflowing products
                 for n in self.C:
                     if vars[f"x({p},{m},{n})"] > 0.001:
                         # append flow data from m to n to DataFrame
@@ -711,45 +666,25 @@ class Infrastructure:
                         )
         self.name_list_DPF = name_list_DPF
 
-        # print installed DPFs
-        print(
-            "Total number of downstream processing facilities = {:.2f}".format(
-                sum(vars[f"b({m})"] for m in self.DPF)
-            )
-        )
-        print("List of downstream processing facilities:", self.name_list_DPF)
+        # save the ``self.product_flow`` DataFrame to a csv file
+        self.product_flow.to_csv("results/product_flow.csv")
 
-        # print demand satisfaction for all customers in the value chain
-        print("\n-------------------------------------------------------------")
-        print("Demand Satisfaction")
+        # compute demand satisfaction of all customers in value chain
         demand_satisfaction = {}
         for p in self.P:
             for n in self.C:
                 demand_satisfaction[(p, n)] = sum(
                     vars[f"x({p},{m},{n})"] for m in self.DPF
                 )
-                print(
-                    "Demand Satisfaction of {} = {:.2f} ton/day {}".format(
-                        n, demand_satisfaction[(p, n)], p
-                    )
-                )
         self.demand_satisfaction = demand_satisfaction
 
-        # process specific components of the objective function, recall that
-        # objective function = revenue - CAPEX - OPEX - transportation costs
-        print("\n-------------------------------------------------------------")
-        print("Objective Function Breakdown")
-
-        # print value chain revenue
-        print("\nRevenue")
+        # compute individual elements of the economic objective function
+        # revenue
         self.Revenue = sum(
             sum(self.market_price[p] * self.demand_satisfaction[(p, n)] for n in self.C)
             for p in self.P
         )
-        print("The total revenue is {:.2f} euro/day".format(self.Revenue))
-
-        # print transportation costs of the value chain
-        print("\nTransportation Costs")
+        # transportation costs
         # transportation costs between S and OCF
         self.transportation_cost_1 = sum(
             2
@@ -758,11 +693,6 @@ class Infrastructure:
             * sum(vars[f"x({p},{i},{j})"] for p in self.P)
             for i in self.S
             for j in self.OCF
-        )
-        print(
-            "The transportation cost from Sources to Optional Compacting Facilities is {:.2f} euro/day".format(
-                self.transportation_cost_1
-            )
         )
         # transportation costs between OCF and MPF
         self.transportation_cost_2 = sum(
@@ -773,11 +703,6 @@ class Infrastructure:
             for j in self.OCF
             for k in self.MPF
         )
-        print(
-            "The transportation cost from Optional Compacting Facilities to Mechanical Preprocessing Facilities is {:.2f} euro/day".format(
-                self.transportation_cost_2
-            )
-        )
         # transportation cost between MPF and CPF
         self.transportation_cost_3 = sum(
             2
@@ -786,11 +711,6 @@ class Infrastructure:
             * sum(vars[f"x({p},{k},{l})"] for p in self.P)
             for k in self.MPF
             for l in self.CPF
-        )
-        print(
-            "The transportation cost from Mechanical Preprocessing Facilities to Chemical Processing Facilities is {:.2f} euro/day".format(
-                self.transportation_cost_3
-            )
         )
         # transportation cost between CPF and DPF
         self.transportation_cost_4 = sum(
@@ -801,11 +721,6 @@ class Infrastructure:
             for l in self.CPF
             for m in self.DPF
         )
-        print(
-            "The transportation cost from Chemical Processing Facilities to Downstream Processing Facilities is {:.2f} euro/day".format(
-                self.transportation_cost_4
-            )
-        )
         # transportation cost between DPF and C
         self.transportation_cost_5 = sum(
             2
@@ -815,25 +730,12 @@ class Infrastructure:
             for m in self.DPF
             for n in self.C
         )
-        print(
-            "The transportation cost from Downstream Processing Facilities to Customers is {:.2f} euro/day".format(
-                self.transportation_cost_5
-            )
-        )
-
-        # print CAPEX of the value chain per facility
-        print("\nCapital Expenditure (CAPEX)")
+        # CAPEX of facilities in the value chain
         self.capex_OCF = sum(self.fixed_OCF * vars[f"b({j})"] for j in self.OCF)
         self.capex_MPF = sum(self.fixed_MPF * vars[f"b({k})"] for k in self.MPF)
         self.capex_CPF = sum(self.fixed_CPF * vars[f"b({l})"] for l in self.CPF)
         self.capex_DPF = sum(self.fixed_DPF * vars[f"b({m})"] for m in self.DPF)
-        print("CAPEX of OCFs is {:.2f} euro/day".format(self.capex_OCF))
-        print("CAPEX of MPFs is {:.2f} euro/day".format(self.capex_MPF))
-        print("CAPEX of CPFs is {:.2f} euro/day".format(self.capex_CPF))
-        print("CAPEX of DPFs is {:.2f} euro/day".format(self.capex_DPF))
-
-        # print OPEX of the value chain per facility
-        print("\nOperating Cost (OPEX)")
+        # OPEX of facilities int he value chain
         self.opex_OCF = sum(
             self.variable_OCF
             * sum(vars[f"x({p},{i},{j})"] for i in self.S for p in self.P)
@@ -854,15 +756,90 @@ class Infrastructure:
             * sum(vars[f"x({p},{l},{m})"] for l in self.CPF for p in self.P)
             for m in self.DPF
         )
-        print("OPEX of OCFs is {:.2f} euro/day".format(self.opex_OCF))
-        print("OPEX of MPFs is {:.2f} euro/day".format(self.opex_MPF))
-        print("OPEX of CPFs is {:.2f} euro/day".format(self.opex_CPF))
-        print("OPEX of DPFs is {:.2f} euro/day".format(self.opex_DPF))
 
-        # save the ``self.product_flow`` DataFrame to a csv file
-        self.product_flow.to_csv("product_flows.csv")
+        # compute individual elements of the environmental objective function
+        # transportation impact
+        # transportation impact between S and OCF
+        self.transportation_impact_1 = sum(
+            2
+            * self.D1.loc[i, j]
+            * self.TI_ETICS
+            * sum(vars[f"x({p},{i},{j})"] for p in self.P)
+            for i in self.S
+            for j in self.OCF
+        )
+        # transportation impact between OCF and MPF
+        self.transportation_impact_2 = sum(
+            2
+            * self.D2.loc[j, k]
+            * self.TI_comp_ETICS
+            * sum(vars[f"x({p},{j},{k})"] for p in self.P)
+            for j in self.OCF
+            for k in self.MPF
+        )
+        # transportation impact between MPF and CPF
+        self.transportation_impact_3 = sum(
+            2
+            * self.D3.loc[k, l]
+            * self.TI_pre_concentrate
+            * sum(vars[f"x({p},{k},{l})"] for p in self.P)
+            for k in self.MPF
+            for l in self.CPF
+        )
+        # transportation impact between CPF and DPF
+        self.transportation_impact_4 = sum(
+            2
+            * self.D4.loc[l, m]
+            * self.TI_pyrolysis_oil
+            * sum(vars[f"x({p},{l},{m})"] for p in self.P)
+            for l in self.CPF
+            for m in self.DPF
+        )
+        # transportation impact between DPF and C
+        self.transportation_impact_5 = sum(
+            2
+            * self.D5.loc[m, n]
+            * self.TI_styrene
+            * sum(vars[f"x({p},{m},{n})"] for p in self.P)
+            for m in self.DPF
+            for n in self.C
+        )
+        # construction impact
+        self.construction_impact_OCF = sum(
+            self.CI_OCF * sum(vars[f"x({p},{i},{j})"] for i in self.S for p in self.P)
+            for j in self.OCF
+        )
+        self.construction_impact_MPF = sum(
+            self.CI_MPF * sum(vars[f"x({p},{j},{k})"] for j in self.OCF for p in self.P)
+            for k in self.MPF
+        )
+        self.construction_impact_CPF = sum(
+            self.CI_CPF * sum(vars[f"x({p},{k},{l})"] for k in self.MPF for p in self.P)
+            for l in self.CPF
+        )
+        self.construction_impact_DPF = sum(
+            self.CI_DPF * sum(vars[f"x({p},{l},{m})"] for l in self.CPF for p in self.P)
+            for m in self.DPF
+        )
+        # operational impact
+        self.operational_impact_OCF = sum(
+            self.OI_OCF * sum(vars[f"x({p},{i},{j})"] for i in self.S for p in self.P)
+            for j in self.OCF
+        )
+        self.operational_impact_MPF = sum(
+            self.OI_MPF * sum(vars[f"x({p},{j},{k})"] for j in self.OCF for p in self.P)
+            for k in self.MPF
+        )
+        self.operational_impact_CPF = sum(
+            self.OI_CPF * sum(vars[f"x({p},{k},{l})"] for k in self.MPF for p in self.P)
+            for l in self.CPF
+        )
+        self.operational_impact_DPF = sum(
+            self.OI_DPF * sum(vars[f"x({p},{l},{m})"] for l in self.CPF for p in self.P)
+            for m in self.DPF
+        )
 
-    def plot_resulting_infrastructure(self, country=None, img_path=None):
+    def plot_infrastructure(self, country=None, img_path=None):
         """
         Create plot where the nodes are plotted as a scatter plot with the size
         of the node corresponding to the amount of waste sourced from it. The
@@ -888,11 +865,11 @@ class Infrastructure:
         # convert source_cap DataFrame to list containing row sums
         source_cap_row_sums = self.source_cap.sum(axis=1).to_list()
         # extract source coordinates to list
-        sources = pd.read_csv("coordinates_sources.csv")
+        sources = pd.read_csv("results/coordinates_sources.csv")
         x_coords = sources["xcord"].to_list()
         y_coords = sources["ycord"].to_list()
         # extract customer coordinates list
-        customers = pd.read_csv("coordinates_customers.csv")
+        customers = pd.read_csv("results/coordinates_customers.csv")
         x_coords_c = customers["xcord"].to_list()
         y_coords_c = customers["ycord"].to_list()
 
@@ -999,19 +976,23 @@ class Infrastructure:
                 boxcoords="offset points",
             )
             plt.gca().add_artist(ab)
+        # set plot title
+        plt.title(
+            f"Net profit: {self.obj_economic:_.2f} euro/day\nEnv. impact: {self.obj_environmental/self.env_cost:_.2f} tons CO2-eq/day".replace(
+                "_", "'"
+            )
+        )
         # plot and save the figure
-        fig.savefig("results_infrastructure.pdf", dpi=1200)
-        plt.show()
+        fig.savefig("results/infrastructure.pdf", dpi=1200)
 
-    def plot_resulting_product_flow(self, country=None, img_path=None):
+    def plot_product_flow(self, country=None, img_path=None, layered=False):
         """
         Create a plot where product flows are plotted between nodes represented
         by a scatter plot. The nodes of the scatter plot are scaled according to
-        the amount of waste available at them. The amount of product exchanged
-        between nodes is represented by the width of the line connecting them.
-        The lines and nodes are colour and shape coded according to the
-        facilities installed at the node and the type of material being
-        transported.
+        the amount of waste available at them. Product interchange between nodes
+        is represented by a line connecting them. The lines and nodes are colour
+        and shape coded according to the facilities installed at the node and
+        the type of material being transported.
 
         Parameters
         ----------
@@ -1022,6 +1003,12 @@ class Infrastructure:
         img_path (str): optional string containing the location of the image
         file which (if specified) will be used as a background for the generated
         plot, REQUIRES ``country`` to be specified as well
+
+        layered (bool): optional boolean which is False by default, if set to
+        True then the default figure will be generated along with a series of
+        figures where the product flow is separeted into layers by plotting each
+        product flow type in a separate figure (the layered visualisation is
+        useful for analysing complex or very large networks)
 
         Notes
         -----
@@ -1035,10 +1022,95 @@ class Infrastructure:
         # convert source_cap DataFrame to list containing row sums
         source_cap_row_sums = self.source_cap.sum(axis=1).to_list()
         # extract source coordinates to list
-        sources = pd.read_csv("coordinates_sources.csv")
+        sources = pd.read_csv("results/coordinates_sources.csv")
         x_coords = sources["xcord"].to_list()
         y_coords = sources["ycord"].to_list()
-
+        # convert name_list of installed facilities into an int_list
+        int_list_OCF = name_list_to_int_list(self.name_list_OCF)
+        int_list_MPF = name_list_to_int_list(self.name_list_MPF)
+        int_list_CPF = name_list_to_int_list(self.name_list_CPF)
+        int_list_DPF = name_list_to_int_list(self.name_list_DPF)
+        # create manual symbols for legend
+        point_S = mlines.Line2D(
+            [0],
+            [0],
+            label="only S",
+            marker="o",
+            markersize=10,
+            markeredgecolor=colours[0],
+            markerfacecolor=colours[0],
+            linestyle="",
+        )
+        point_OCF = mlines.Line2D(
+            [0],
+            [0],
+            label="up to OCF",
+            marker="o",
+            markersize=10,
+            markeredgecolor=colours[1],
+            markerfacecolor=colours[1],
+            linestyle="",
+        )
+        point_MPF = mlines.Line2D(
+            [0],
+            [0],
+            label="up to MPF",
+            marker="o",
+            markersize=10,
+            markeredgecolor=colours[2],
+            markerfacecolor=colours[2],
+            linestyle="",
+        )
+        point_CPF = mlines.Line2D(
+            [0],
+            [0],
+            label="up to CPF",
+            marker="o",
+            markersize=10,
+            markeredgecolor=colours[3],
+            markerfacecolor=colours[3],
+            linestyle="",
+        )
+        point_DPF = mlines.Line2D(
+            [0],
+            [0],
+            label="up to DPF",
+            marker="o",
+            markersize=10,
+            markeredgecolor=colours[4],
+            markerfacecolor=colours[4],
+            linestyle="",
+        )
+        line_ET = mlines.Line2D(
+            [0],
+            [0],
+            label="ETICS flow",
+            c=colours[0],
+        )
+        line_CE = mlines.Line2D(
+            [0],
+            [0],
+            label="compressed ETICS flow",
+            c=colours[1],
+        )
+        line_PC = mlines.Line2D(
+            [0],
+            [0],
+            label="pre-concentrate flow",
+            c=colours[2],
+        )
+        line_PO = mlines.Line2D(
+            [0],
+            [0],
+            label="pyrolysis oil flow",
+            c=colours[3],
+        )
+        line_PS = mlines.Line2D(
+            [0],
+            [0],
+            label="styrene flow",
+            c=colours[4],
+        )
         # obtain plot limits using geocoder if ``country`` is specified
         if country != None:
             # obtain corresponding lats and lngs using Nominatim geocoder
@@ -1061,7 +1133,7 @@ class Infrastructure:
             length_x = max(x_coords) - min(x_coords)
             length_y = max(y_coords) - min(y_coords)
 
-        # create the figure and define axis labels and limits
+        # create the default unlayered figure
         fig, ax = plt.subplots(figsize=(8, 8))
         ax.set_xlabel("Horizontal distance [km]")
         ax.set_ylabel("Vertical distance [km]")
@@ -1076,8 +1148,30 @@ class Infrastructure:
         if img_path != None and country != None:
             background_img = plt.imread(img_path)
             ax.imshow(background_img, zorder=0, extent=[x_min, x_max, y_min, y_max])
+        # loop over the source coordinates (that is, number of nodes)
+        factor = int(300 / max(source_cap_row_sums))
+        for idx in range(0, len(x_coords)):
+            # plot node with select node colour
+            if idx in int_list_DPF:
+                colour = colours[4]
+            elif idx in int_list_CPF:
+                colour = colours[3]
+            elif idx in int_list_MPF:
+                colour = colours[2]
+            elif idx in int_list_OCF:
+                colour = colours[1]
+            else:
+                colour = colours[0]
+            # plot the node
+            plt.scatter(
+                x_coords[idx],
+                y_coords[idx],
+                c=colour,
+                s=source_cap_row_sums[idx] * factor,
+                zorder=2.5,
+            )
         # draw lines representing exchanged products
-        product_flows = pd.read_csv("product_flows.csv")
+        product_flows = pd.read_csv("results/product_flow.csv")
         for _, row in product_flows.iterrows():
             origin_int = name_to_int(row["Origin"])
             destination_int = name_to_int(row["Destination"])
@@ -1116,114 +1210,6 @@ class Infrastructure:
                     ),
                     zorder=1,
                 )
-        # convert name_list of installed facilities into an int_list
-        int_list_OCF = name_list_to_int_list(self.name_list_OCF)
-        int_list_MPF = name_list_to_int_list(self.name_list_MPF)
-        int_list_CPF = name_list_to_int_list(self.name_list_CPF)
-        int_list_DPF = name_list_to_int_list(self.name_list_DPF)
-        # loop over the source coordinates (that is, number of nodes)
-        factor = int(300 / max(source_cap_row_sums))
-        for idx in range(0, len(x_coords)):
-            # plot node with select node colour
-            if idx in int_list_DPF:
-                colour = colours[4]
-            elif idx in int_list_CPF:
-                colour = colours[3]
-            elif idx in int_list_MPF:
-                colour = colours[2]
-            elif idx in int_list_OCF:
-                colour = colours[1]
-            else:
-                colour = colours[0]
-            # plot the node
-            plt.scatter(
-                x_coords[idx],
-                y_coords[idx],
-                c=colour,
-                s=source_cap_row_sums[idx] * factor,
-                zorder=2.5,
-            )
-        # create manual symbols for legend
-        point_S = mlines.Line2D(
-            [0],
-            [0],
-            label="only S",
-            marker="o",
-            markersize=10,
-            markeredgecolor=colours[0],
-            markerfacecolor=colours[0],
-            linestyle="",
-        )
-        point_OCF = mlines.Line2D(
-            [0],
-            [0],
-            label="at least OCF",
-            marker="o",
-            markersize=10,
-            markeredgecolor=colours[1],
-            markerfacecolor=colours[1],
-            linestyle="",
-        )
-        point_MPF = mlines.Line2D(
-            [0],
-            [0],
-            label="at least MPF",
-            marker="o",
-            markersize=10,
-            markeredgecolor=colours[2],
-            markerfacecolor=colours[2],
-            linestyle="",
-        )
-        point_CPF = mlines.Line2D(
-            [0],
-            [0],
-            label="at least CPF",
-            marker="o",
-            markersize=10,
-            markeredgecolor=colours[3],
-            markerfacecolor=colours[3],
-            linestyle="",
-        )
-        point_DPF = mlines.Line2D(
-            [0],
-            [0],
-            label="at least DPF",
-            marker="o",
-            markersize=10,
-            markeredgecolor=colours[4],
-            markerfacecolor=colours[4],
-            linestyle="",
-        )
-        line_ET = mlines.Line2D(
-            [0],
-            [0],
-            label="ETICS flow",
-            c=colours[0],
-        )
-        line_CE = mlines.Line2D(
-            [0],
-            [0],
-            label="compressed ETICS flow",
-            c=colours[1],
-        )
-        line_PC = mlines.Line2D(
-            [0],
-            [0],
-            label="pre-concentrate flow",
-            c=colours[2],
-        )
-        line_PO = mlines.Line2D(
-            [0],
-            [0],
-            label="pyrolysis oil flow",
-            c=colours[3],
-        )
-        line_PS = mlines.Line2D(
-            [0],
-            [0],
-            label="styrene flow",
-            c=colours[4],
-        )
         plt.legend(
             handles=[
                 point_S,
@@ -1241,9 +1227,403 @@ class Infrastructure:
             ncol=2,
             frameon=False,
         )
-        plt.title(f"Net profit: {self.OBJ:.2f} euro/day")
-        fig.savefig("results_product_flow.pdf", dpi=1200)
-        plt.show()
+        plt.title(
+            f"Net profit: {self.obj_economic:_.2f} euro/day\nEnv. impact: {self.obj_environmental/self.env_cost:_.2f} tons CO2-eq/day".replace(
+                "_", "'"
+            )
+        )
+        fig.savefig("results/product_flow.pdf", dpi=1200)
+
+        # create layered figure if specified
+        if layered:
+            # loop over the number of layers required & clear existing figure
+            plt.clf()
+            for layer in range(0, len(colours)):
+                fig, ax = plt.subplots(figsize=(8, 8))
+                ax.set_xlabel("Horizontal distance [km]")
+                ax.set_ylabel("Vertical distance [km]")
+                # set corresponding limits to the plot
+                if country != None:
+                    ax.set_xlim(x_min * 1.2, x_max * 1.2)
+                    ax.set_ylim(y_min * 1.2, y_max * 1.5)
+                else:
+                    ax.set_xlim(
+                        min(x_coords) - length_x * 0.2, max(x_coords) + length_x * 0.2
+                    )
+                    ax.set_ylim(
+                        min(y_coords) - length_y * 0.2, max(y_coords) + length_y * 0.5
+                    )
+                # set background image if ``img_path`` has been provided
+                if img_path != None and country != None:
+                    background_img = plt.imread(img_path)
+                    ax.imshow(
+                        background_img, zorder=0, extent=[x_min, x_max, y_min, y_max]
+                    )
+                # loop over the source coordinates (that is, number of nodes)
+                # create a scatter plont of all nodes
+                factor = int(300 / max(source_cap_row_sums))
+                for idx in range(0, len(x_coords)):
+                    # plot node with select node colour
+                    if idx in int_list_DPF:
+                        colour = colours[4]
+                    elif idx in int_list_CPF:
+                        colour = colours[3]
+                    elif idx in int_list_MPF:
+                        colour = colours[2]
+                    elif idx in int_list_OCF:
+                        colour = colours[1]
+                    else:
+                        colour = colours[0]
+                    # plot the node
+                    plt.scatter(
+                        x_coords[idx],
+                        y_coords[idx],
+                        c=colour,
+                        s=source_cap_row_sums[idx] * factor,
+                        zorder=2.5,
+                    )
+                # draw lines representing product flow ONLY on current layer
+                product_flows = pd.read_csv("results/product_flow.csv")
+                title = f"Layer: {self.P[layer]} flow".replace("_", " ")
+                for _, row in product_flows.iterrows():
+                    origin_int = name_to_int(row["Origin"])
+                    destination_int = name_to_int(row["Destination"])
+                    # draw line only if origin & destination have diff node num.
+                    if origin_int != destination_int:
+                        # plot lines only if they should appear on current layer
+                        if self.P.index(row["Product"]) == layer:
+                            colour = colours[layer]
+                            # draw the corresponding product flow line
+                            x = (x_coords[origin_int], x_coords[destination_int])
+                            y = (y_coords[origin_int], y_coords[destination_int])
+                            plt.plot(x, y, lw=2, c=colour)
+                            # annotate w arrow showing flow direction
+                            x_diff = x_coords[destination_int] - x_coords[origin_int]
+                            y_diff = y_coords[destination_int] - y_coords[origin_int]
+                            plt.annotate(
+                                "",
+                                xy=(
+                                    x_coords[origin_int] + 0.8 * x_diff,
+                                    y_coords[origin_int] + 0.8 * y_diff,
+                                ),
+                                xytext=(
+                                    x_coords[origin_int] + 0.6 * x_diff,
+                                    y_coords[origin_int] + 0.6 * y_diff,
+                                ),
+                                arrowprops=dict(
+                                    arrowstyle="->",
+                                    lw=2,
+                                    color=colour,
+                                    mutation_scale=25,
+                                ),
+                                zorder=1,
+                            )
+                        else:
+                            continue
+                # finish annotating figure and save it
+                plt.legend(
+                    handles=[
+                        point_S,
+                        point_OCF,
+                        point_MPF,
+                        point_CPF,
+                        point_DPF,
+                        line_ET,
+                        line_CE,
+                        line_PC,
+                        line_PO,
+                        line_PS,
+                    ],
+                    loc="upper right",
+                    ncol=2,
+                    frameon=False,
+                )
+                plt.title(title)
+                file_name = f"results/product_flow_layer{layer}.pdf"
+                fig.savefig(file_name, dpi=1200)
+
+    def plot_objective_function_breakdown(self):
+        """
+        Function for plotting a bar graph where the individual components of
+        both the economic and environmental objective functions are broken down.
+        The plot generates an individual subplot for each of the objective
+        functions.
+
+        Notes
+        -----
+        This is an excellent method for comparing where the costs and
+        environmental impacts occur in different networks.
+        """
+
+        # define colour scheme used throughout using hex notation
+        # colours correspond to: yellow, orange, red, purple, indigo
+        colours = ["#ffa600", "#ff6361", "#bc5090", "#58508d", "#003f5c"]
+
+        # define number of categories
+        N = 3
+
+        # clear the figure
+        plt.clf()
+
+        # define economic subcategories and their values
+        ETICS = (self.transportation_cost_1, 0, 0)
+        compressed_ETICS = (
+            self.transportation_cost_2,
+            self.capex_OCF,
+            self.opex_OCF,
+        )
+        pre_concentrate = (
+            self.transportation_cost_3,
+            self.capex_MPF,
+            self.opex_MPF,
+        )
+        pyrolysis_oil = (
+            self.transportation_cost_4,
+            self.capex_CPF,
+            self.opex_CPF,
+        )
+        styrene = (
+            self.transportation_cost_5,
+            self.capex_DPF,
+            self.opex_DPF,
+        )
+
+        # define the bottoms using numpy to add the tuples
+        bottom3 = np.add(np.array(ETICS), np.array(compressed_ETICS))
+        bottom4 = np.add(np.array(bottom3), np.array(pre_concentrate))
+        bottom5 = np.add(np.array(bottom4), np.array(pyrolysis_oil))
+
+        # plot the bar graphs for the economic values and save the figure
+        ind = np.arange(N)
+        width = 0.5
+        fig, ax = plt.subplots(figsize=(8, 8))
+        b1 = ax.bar(ind, ETICS, width, color=colours[0])
+        b2 = ax.bar(ind, compressed_ETICS, width, bottom=ETICS, color=colours[1])
+        b3 = ax.bar(
+            ind,
+            pre_concentrate,
+            width,
+            bottom=bottom3,
+            color=colours[2],
+        )
+        b4 = ax.bar(
+            ind,
+            pyrolysis_oil,
+            width,
+            bottom=bottom4,
+            color=colours[3],
+        )
+        b5 = ax.bar(
+            ind,
+            styrene,
+            width,
+            bottom=bottom5,
+            color=colours[4],
+        )
+        ax.set_ylabel("Economic cost [euro/day]")
+        ax.set_xticks(ind, ("TC", "CAPEX", "OPEX"))
+        ax.legend(
+            (b1[0], b2[0], b3[0], b4[0], b5[0]),
+            (
+                "ETICS",
+                "compressed ETICS or OCF",
+                "pre-concentrate or MPF",
+                "pyrolysis oil or CPF",
+                "styrene or DPF",
+            ),
+            loc="upper right",
+        )
+        fig.savefig("results/economic_objective_breakdown.pdf", dpi=1200)
+
+        # clear the figure
+        plt.clf()
+
+        # define environmental subcategories and their values
+        ETICS = (float(self.transportation_impact_1), float(0), float(0))
+        compressed_ETICS = (
+            self.transportation_impact_2,
+            self.construction_impact_OCF,
+            self.operational_impact_OCF,
+        )
+        pre_concentrate = (
+            self.transportation_impact_3,
+            self.construction_impact_MPF,
+            self.operational_impact_MPF,
+        )
+        pyrolysis_oil = (
+            self.transportation_impact_4,
+            self.construction_impact_CPF,
+            self.operational_impact_CPF,
+        )
+        styrene = (
+            self.transportation_impact_5,
+            self.construction_impact_DPF,
+            self.operational_impact_DPF,
+        )
+
+        # define the bottoms using numpy to add the tuples
+        bottom3 = np.add(np.array(ETICS), np.array(compressed_ETICS))
+        bottom4 = np.add(np.array(bottom3), np.array(pre_concentrate))
+        bottom5 = np.add(np.array(bottom4), np.array(pyrolysis_oil))
+
+        # plot the bar graphs for the environmental values and save the figure
+        ind = np.arange(N)
+        width = 0.35
+        fig, ax = plt.subplots(figsize=(8, 8))
+        b1 = ax.bar(ind, ETICS, width, color=colours[0])
+        b2 = ax.bar(ind, compressed_ETICS, width, bottom=ETICS, color=colours[1])
+        b3 = ax.bar(
+            ind,
+            pre_concentrate,
+            width,
+            bottom=bottom3,
+            color=colours[2],
+        )
+        b4 = ax.bar(
+            ind,
+            pyrolysis_oil,
+            width,
+            bottom=bottom4,
+            color=colours[3],
+        )
+        b5 = ax.bar(
+            ind,
+            styrene,
+            width,
+            bottom=bottom5,
+            color=colours[4],
+        )
+        ax.set_ylabel("Environmental impact [tons CO2-eq/day]")
+        ax.set_xticks(ind, ("TI", "CI", "OI"))
+        ax.legend(
+            (b1[0], b2[0], b3[0], b4[0], b5[0]),
+            (
+                "ETICS",
+                "compressed ETICS or OCF",
+                "pre-concentrate or MPF",
+                "pyrolysis oil or CPF",
+                "styrene or DPF",
+            ),
+            loc="upper right",
+        )
+        fig.savefig("results/environmental_objective_breakdown.pdf", dpi=1200)
+
+    def tabulate_product_flows(self):
+        """
+        Generate a table with the facility types as columns and the node numbers
+        as rows. The cells are populated with the amount of product flowing
+        through a specific type of facility in a specific node [tons/day], along
+        with the number of facilities installed and their capacity in
+        parenthesis. Two tables are generated from the results: one through
+        creating a tex file and callind pdflatex, and one using Seaborn which
+        displays only teh values (not the number of installed facilities).
+        """
+
+        # extract resulting variable values and store them in a dictionary
+        vars = {}
+        for var in self.model.getVars():
+            vars[f"{var.varName}"] = var.x
+
+        # read the product_flow csv using pandas
+        product_flows = pd.read_csv("results/product_flow.csv")
+
+        # generate a pandas dataframe for the tabulation
+        columns = ["OCF [ton/day]", "MPF [ton/day]", "CPF [ton/day]", "DPF [ton/day]"]
+        tabulated_product_flow = pd.DataFrame(columns=columns)
+        tabulated_product_flow.rename_axis("node", axis=1)
+        # generate another dataframe which will store only the values
+        tabulated_product_flow_val = pd.DataFrame(columns=columns)
+        tabulated_product_flow_val.rename_axis("node", axis=1)
+
+        # loop over the nodes in the network
+        sources = pd.read_csv("results/coordinates_sources.csv")
+        x_coords = sources["xcord"].to_list()
+        for node in range(0, len(x_coords)):
+            # filter the df using OCF & current node, then extract info
+            name = f"OCF_{node}"
+            OCF_amount = 0
+            filtered = product_flows[product_flows["Destination"] == name]
+            for _, row in filtered.iterrows():
+                OCF_amount += row["Amount"]
+            OCF_installed = vars[f"b({name})"]
+            OCF_entry = f"{OCF_amount:.1f} ({OCF_installed:.0f} * {self.facility_cap['OCF']:.1f})"
+            OCF_entry_val = OCF_amount
+
+            # filter the df using MPF & current node, then extract info
+            name = f"MPF_{node}"
+            MPF_amount = 0
+            filtered = product_flows[product_flows["Destination"] == name]
+            for _, row in filtered.iterrows():
+                MPF_amount += row["Amount"]
+            MPF_installed = vars[f"b({name})"]
+            MPF_entry = f"{MPF_amount:.1f} ({MPF_installed:.0f} * {self.facility_cap['MPF']:.1f})"
+            MPF_entry_val = MPF_amount
+
+            # filter the df using CPF & current node, then extract info
+            name = f"CPF_{node}"
+            CPF_amount = 0
+            filtered = product_flows[product_flows["Destination"] == name]
+            for _, row in filtered.iterrows():
+                CPF_amount += row["Amount"]
+            CPF_installed = vars[f"b({name})"]
+            CPF_entry = f"{CPF_amount:.1f} ({CPF_installed:.0f} * {self.facility_cap['CPF']:.1f})"
+            CPF_entry_val = CPF_amount
+
+            # filter the df using DPF & current node, then extract info
+            name = f"DPF_{node}"
+            DPF_amount = 0
+            filtered = product_flows[product_flows["Destination"] == name]
+            for _, row in filtered.iterrows():
+                DPF_amount += row["Amount"]
+            DPF_installed = vars[f"b({name})"]
+            DPF_entry = f"{DPF_amount:.1f} ({DPF_installed:.0f} * {self.facility_cap['DPF']:.1f})"
+            DPF_entry_val = DPF_amount
+
+            # construct new data for this node and append it to the dataframe
+            new_data = {
+                "OCF [ton/day]": OCF_entry,
+                "MPF [ton/day]": MPF_entry,
+                "CPF [ton/day]": CPF_entry,
+                "DPF [ton/day]": DPF_entry,
+            }
+            tabulated_product_flow = tabulated_product_flow._append(
+                new_data, ignore_index=True
+            )
+            # do the same for the dataframe containing only the values
+            new_data_val = {
+                "OCF [ton/day]": OCF_entry_val,
+                "MPF [ton/day]": MPF_entry_val,
+                "CPF [ton/day]": CPF_entry_val,
+                "DPF [ton/day]": DPF_entry_val,
+            }
+            tabulated_product_flow_val = tabulated_product_flow_val._append(
+                new_data_val, ignore_index=True
+            )
+
+        # name index columns of both dataframes
+        tabulated_product_flow.index.name = "node"
+        tabulated_product_flow_val.index.name = "node"
+
+        # save the dataframe as a table in pdf format using latex
+        filename = "results/tabulated_product_flow.tex"
+        directory = "results/"
+        template = r"""\documentclass[preview]{{standalone}}
+        \usepackage{{booktabs}}
+        \begin{{document}}
+        {}
+        \end{{document}}
+        """
+        with open(filename, "w") as f:
+            f.write(template.format(tabulated_product_flow.to_latex()))
+        # subprocess.call(["pdflatex", filename])
+        subprocess.run(
+            ["pdflatex", "-output-directory=" + directory, filename],
+            stdout=subprocess.PIPE,
+        )
+
+        # generate Seaborn heatmap
+        sns.heatmap(tabulated_product_flow_val, annot=True, cmap="Reds")
+        plt.savefig("results/tabulated_product_flow_heatmap.pdf", dpi=1200)
 
 
 @staticmethod

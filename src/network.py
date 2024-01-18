@@ -52,7 +52,7 @@ def region_generator(length, n, customers_list):
 
     # create DataFrame containing sources and export it to csv file
     sources = pd.DataFrame(points, columns=["xcord", "ycord"])
-    sources.to_csv("coordinates_sources.csv", float_format="%.3f")
+    sources.to_csv("results/coordinates_sources.csv", float_format="%.3f")
 
     # create DataFrame containing customers and export it to csv file
     w, z = [], []
@@ -64,7 +64,7 @@ def region_generator(length, n, customers_list):
     customers = pd.DataFrame(
         np.concatenate((w, z), axis=1), columns=["xcord", "ycord"], index=customers_list
     )
-    customers.to_csv("coordinates_customers.csv", float_format="%.3f")
+    customers.to_csv("results/coordinates_customers.csv", float_format="%.3f")
 
     # plot resulting fictional region
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 8))
@@ -87,32 +87,32 @@ def region_generator(length, n, customers_list):
     for k, v in customers.iterrows():
         ax2.annotate(k, v, textcoords="offset points", xytext=(0, 10), ha="center")
     # save as vector graphics and show to user
-    fig.savefig("sources_and_sinks.pdf", dpi=1200)
+    fig.savefig("results/sources_and_sinks.pdf", dpi=1200)
     plt.show()
 
     # calculate Eucledian distances between all point pairs & save to csv
     D1 = pd.DataFrame(
         sp.distance_matrix(sources.values, sources.values), index=i_list, columns=j_list
     )
-    D1.to_csv(r"D1.csv", float_format="%.3f")
+    D1.to_csv(r"results/D1.csv", float_format="%.3f")
     D2 = pd.DataFrame(
         sp.distance_matrix(sources.values, sources.values), index=j_list, columns=k_list
     )
-    D2.to_csv("D2.csv", float_format="%.2f")
+    D2.to_csv("results/D2.csv", float_format="%.2f")
     D3 = pd.DataFrame(
         sp.distance_matrix(sources.values, sources.values), index=k_list, columns=l_list
     )
-    D3.to_csv("D3.csv", float_format="%.2f")
+    D3.to_csv("results/D3.csv", float_format="%.2f")
     D4 = pd.DataFrame(
         sp.distance_matrix(sources.values, sources.values), index=l_list, columns=m_list
     )
-    D4.to_csv("D4.csv", float_format="%.2f")
+    D4.to_csv("results/D4.csv", float_format="%.2f")
     D5 = pd.DataFrame(
         sp.distance_matrix(sources.values, customers.values),
         index=m_list,
         columns=n_list,
     )
-    D5.to_csv("D5.csv", float_format="%.2f")
+    D5.to_csv("results/D5.csv", float_format="%.2f")
 
     # return distance matrices in array format
     D = [D1, D2, D3, D4, D5]
@@ -161,7 +161,7 @@ def region_builder(sources_coords, customers_list, country=None, img_path=None):
 
     # create DataFrame containing sources and export it to csv file
     sources = pd.DataFrame(sources_coords, columns=["xcord", "ycord"])
-    sources.to_csv("coordinates_sources.csv", float_format="%.3f")
+    sources.to_csv("results/coordinates_sources.csv", float_format="%.3f")
 
     # create DataFrame containing customers and export it to csv file
     w, z = [], []
@@ -173,7 +173,7 @@ def region_builder(sources_coords, customers_list, country=None, img_path=None):
     customers = pd.DataFrame(
         np.concatenate((w, z), axis=1), columns=["xcord", "ycord"], index=customers_list
     )
-    customers.to_csv("coordinates_customers.csv", float_format="%.3f")
+    customers.to_csv("results/coordinates_customers.csv", float_format="%.3f")
 
     # obtain plot limits using geocoder if ``country`` is specified
     if country != None:
@@ -236,32 +236,32 @@ def region_builder(sources_coords, customers_list, country=None, img_path=None):
         ax1.imshow(background_img, zorder=0, extent=[x_min, x_max, y_min, y_max])
         ax2.imshow(background_img, zorder=0, extent=[x_min, x_max, y_min, y_max])
     # save as vector graphics and show to user
-    fig.savefig("sources_and_sinks.pdf", dpi=1200)
+    fig.savefig("results/sources_and_sinks.pdf", dpi=1200)
     plt.show()
 
     # calculate Eucledian distances between all point pairs & save to csv
     D1 = pd.DataFrame(
         sp.distance_matrix(sources.values, sources.values), index=i_list, columns=j_list
     )
-    D1.to_csv(r"D1.csv", float_format="%.3f")
+    D1.to_csv(r"results/D1.csv", float_format="%.3f")
     D2 = pd.DataFrame(
         sp.distance_matrix(sources.values, sources.values), index=j_list, columns=k_list
     )
-    D2.to_csv("D2.csv", float_format="%.2f")
+    D2.to_csv("results/D2.csv", float_format="%.2f")
     D3 = pd.DataFrame(
         sp.distance_matrix(sources.values, sources.values), index=k_list, columns=l_list
     )
-    D3.to_csv("D3.csv", float_format="%.2f")
+    D3.to_csv("results/D3.csv", float_format="%.2f")
     D4 = pd.DataFrame(
         sp.distance_matrix(sources.values, sources.values), index=l_list, columns=m_list
     )
-    D4.to_csv("D4.csv", float_format="%.2f")
+    D4.to_csv("results/D4.csv", float_format="%.2f")
     D5 = pd.DataFrame(
         sp.distance_matrix(sources.values, customers.values),
         index=m_list,
         columns=n_list,
     )
-    D5.to_csv("D5.csv", float_format="%.2f")
+    D5.to_csv("results/D5.csv", float_format="%.2f")
 
     # return distance matrices in array format
     D = [D1, D2, D3, D4, D5]

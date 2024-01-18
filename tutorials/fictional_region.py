@@ -7,6 +7,11 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import src.network as network
 import src.optimisation as optimisation
 
+# create the /results directory unless it already exists
+try:
+    os.makedirs("./results")
+except FileExistsError:
+    pass
 
 # number of sources per side of region
 n = 4
@@ -92,7 +97,7 @@ scenario.define_value_chain(
 )
 
 # create optimisation model of the value chain
-scenario.model_value_chain()
+scenario.model_value_chain(weight_economic=1, weight_environmental=0)
 
 # solve the optimisation problem
 scenario.model.Params.MIPFocus = 0
@@ -104,7 +109,7 @@ scenario.model.optimize()
 scenario.process_results()
 
 # plot resulting infrastructure
-scenario.plot_resulting_infrastructure()
+scenario.plot_infrastructure()
 
 # plot resulting product flow
-scenario.plot_resulting_product_flow()
+scenario.plot_product_flow()

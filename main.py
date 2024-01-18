@@ -1,9 +1,16 @@
+import os
 import src.network as network
 import src.optimisation as optimisation
 import pandas as pd
 import numpy as np
 import utils.get_coords as gc
 import utils.convert_coords as cc
+
+# create the /results directory unless it already exists
+try:
+    os.makedirs("./results")
+except FileExistsError:
+    pass
 
 # read region csv file containing sources
 region = pd.read_csv("data/DE_NUTS1.csv")
@@ -35,7 +42,7 @@ city_distances = {
     "Y_distance": y_distance,
 }
 city_distances = pd.DataFrame(city_distances)
-city_distances.to_csv("data/city_distances.csv", float_format="%.3f")
+city_distances.to_csv("results/city_distances.csv", float_format="%.3f")
 
 # generate the sources array of arrays containing x and y distances
 sources = []
@@ -60,7 +67,7 @@ products = [
 ]
 
 # specify product capacity at sources using population density [tons/day]
-ETICS_tons_per_year = 17100  # HBCD-free ETICS in 2017 as per Conversion study
+ETICS_tons_per_year = 17100  # HBCD-free ETICS in 2017 as per Conversio study
 ETICS_tons_per_day = ETICS_tons_per_year / 360
 population = region["Population"].sum()
 s_list, s_values = [], []
@@ -113,7 +120,7 @@ yield_factor = {
 }
 
 # specify maximum facility capacities [tons/day]
-facility_capacity = {"OCF": 0.4, "MPF": 41, "CPF": 12, "DPF": 30}
+facility_capacity = {"OCF": 0.39, "MPF": 41.67, "CPF": 12, "DPF": 30}
 
 # initiate ``Infrastructure`` class based on distances from building network
 scenario = optimisation.Infrastructure(
@@ -126,18 +133,25 @@ scenario.define_value_chain(
 )
 
 # create optimisation model of the value chain
-scenario.model_value_chain(objective="environmental")
+scenario.model_value_chain(weight_economic=0.5, weight_environmental=0.5)
 
 # solve the optimisation problem
-scenario.model.Params.MIPFocus = 0
-scenario.model.presolve()
 scenario.model.optimize()
 
 # process optimisation problem results
+# NOTE: this function MUST be called before any further post-processing is done
 scenario.process_results()
 
 # plot resulting infrastructure
-scenario.plot_resulting_infrastructure(country="Germany", img_path="icons/DE.png")
+scenario.plot_infrastructure(country="Germany", img_path="icons/DE.png")
 
 # plot resulting product flow
-scenario.plot_resulting_product_flow(country="Germany", img_path="icons/DE.png")
+scenario.plot_product_flow(country="Germany", img_path="icons/DE.png", layered=True)
+
+# plot objective function breakdown
+scenario.plot_objective_function_breakdown()
+
+# tabulate the product flows within the network
+scenario.tabulate_product_flows()
+
+print("Post-processing of results finished!")
