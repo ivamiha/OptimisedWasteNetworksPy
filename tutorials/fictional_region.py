@@ -112,4 +112,12 @@ scenario.process_results()
 scenario.plot_infrastructure()
 
 # plot resulting product flow
-scenario.plot_product_flow()
+scenario.plot_product_flow(layered=True)
+
+# plot objective function breakdown
+scenario.plot_objective_function_breakdown()
+
+# tabulate the product flows within the network
+scenario.tabulate_product_flows()
+
+print("Post-processing of results finished!")

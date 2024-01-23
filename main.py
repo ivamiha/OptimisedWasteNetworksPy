@@ -50,7 +50,7 @@ for _, row in city_distances.iterrows():
     sources.append([row["X_distance"], row["Y_distance"]])
 
 # define problem customers by specifying indices w.r.t. sources array
-customers = [0, 8, 11]
+customers = [10, 13, 14]
 
 # generate region defined by distances between sources & sinks
 distances = network.region_builder(
@@ -67,8 +67,9 @@ products = [
 ]
 
 # specify product capacity at sources using population density [tons/day]
+working_days = 330  # days per year during which facilities are operational
 ETICS_tons_per_year = 17100  # HBCD-free ETICS in 2017 as per Conversio study
-ETICS_tons_per_day = ETICS_tons_per_year / 360
+ETICS_tons_per_day = ETICS_tons_per_year / working_days
 population = region["Population"].sum()
 s_list, s_values = [], []
 idx = 0
@@ -120,7 +121,12 @@ yield_factor = {
 }
 
 # specify maximum facility capacities [tons/day]
-facility_capacity = {"OCF": 0.39, "MPF": 41.67, "CPF": 12, "DPF": 30}
+facility_capacity = {
+    "OCF": 140 / working_days,
+    "MPF": 3000 / working_days,
+    "CPF": 4000 / working_days,
+    "DPF": 16500 / working_days,
+}
 
 # initiate ``Infrastructure`` class based on distances from building network
 scenario = optimisation.Infrastructure(
@@ -133,7 +139,7 @@ scenario.define_value_chain(
 )
 
 # create optimisation model of the value chain
-scenario.model_value_chain(weight_economic=0.5, weight_environmental=0.5)
+scenario.model_value_chain(weight_economic=1, weight_environmental=0)
 
 # solve the optimisation problem
 scenario.model.optimize()

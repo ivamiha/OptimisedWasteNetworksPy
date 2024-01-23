@@ -9,8 +9,8 @@ import re
 import math
 import numpy as np
 import seaborn as sns
-import matplotlib.colors as clr
 import subprocess
+import sys
 
 
 class Infrastructure:
@@ -19,47 +19,59 @@ class Infrastructure:
     up the optimisation problem utilising pyscipopt
     """
 
-    # define transportation physical variables
+    # define miscellaneous simulation variables
+    env_cost = 170  # cost of the environmental impact [euro/ton CO2e]
+    circuit_factor = 1.32  # average circuit factor for Germany []
+    working_days = 330  # assume operation 330 day/year (7'920h total) [days]
+    # define transportation variables
     rolloff_load = 6  # maximum load for a roll-off [tons]
     rolloff_volume = 33  # maximum volume for a roll-off [m^3]
     tanker_volume = 45  # maximum volume for steel tanker [m^3]
-    # define transportation cost variables
     fuel_cons = 0.4  # fuel consumption [lt/km]
     fuel_price = 1.79  # fuel price [euro/lt]
     toll_cost = 0.198  # toll cost [euro/km]
     avg_speed = 60  # average driving speed [km/h]
     driver_wage = 45500  # driver wage [euro/year]
     driver_hours = 2070  # driver working hours [hours/year]
-    vehicle_cost = 30000 / (15 * 360 * 90 / 14)  # large roll-off [euro/h]
-    vehicle_cost_small = 10000 / (15 * 360 * 90 / 14)  # small roll-off [euro/h]
+    vehicle_cost_rollof = 10000 / (15 * 360 * 90 / 14)  # roll-off [euro/h]
     vehicle_cost_tanker = 50000 / (15 * 360 * 90 / 14)  # steel tanker [euro/h]
-    # define physical variables
+    max_time = 100  # maximum transportation between facilities [hours]
+    # define product physical variables
     rho_ETICS = 0.014  # density of ETICS [ton/m^3]
     rho_compressed_ETICS = 0.14  # density of compressed ETICS [ton/m^3]
     rho_pre_concentrate = 0.35  # density of pre-concentrate [ton/m^3]
     rho_pyrolysis_oil = 0.80  # density of pyrolysis oil [ton/m^3]
     rho_styrene = 0.910  # density of styrene [ton/m^3]
-    max_time = 100  # maximum transportation between facilities [hours]
     # define economic variables
-    variable_OCF = 11  # operational costs of OCF [euro/ton]
-    variable_MPF = 46  # operational cost of MPF [euro/ton]
-    variable_CPF = 44  # operational cost of CPF [euro/ton]
-    variable_DPF = 100  # operational cost of DPF [euro/ton]
+    ref_CAPEX_OCF = 0.057  # CAPEX of OCF for reference capacity [Meuro]
+    ref_CAPEX_MPF = 8  # CAPEX of MPF for reference capacity [Meuro]
+    ref_CAPEX_CPF = 20.2  # CAPEX of CPF for reference capacity [Meuro]
+    ref_CAPEX_DPF = 0.9  # CAPEX of DPF for reference capacity [Meuro]
+    ref_capacity_OCF = 140 / working_days  # OCF reference capacity [ton/day]
+    ref_capacity_MPF = 15000 / working_days  # MPF reference capacity [ton/day]
+    ref_capacity_CPF = 40000 / working_days  # CPF reference capacity [ton/day]
+    ref_capacity_DPF = 33000 / working_days  # DPF reference capacity [ton/day]
+    ref_fOPEX_OCF = 0.012  # reference fixed OPEX of OCF [Meuro/year]
+    ref_fOPEX_MPF = 1.1  # reference fixed OPEX of MPF [Meuro/year]
+    ref_fOPEX_CPF = 1.7  # reference fixed OPEX of CPF [Meuro/year]
+    ref_fOPEX_DPF = 4.7  # reference fixed OPEX of DPF [Meuro/year]
+    vOPEX_OCF = 11  # variable OPEX of OCF [euro/ton]
+    vOPEX_MPF = 46  # variable OPEX of MPF [euro/ton]
+    vOPEX_CPF = 44  # variable OPEX of CPF [euro/ton]
+    vOPEX_DPF = 97  # variable OPEX of DPF [euro/ton]
     period = 10  # loan period [years]
-    rate = 0.1
+    rate = 0.10  # discount rate []
     # define environmental impact variables
-    env_rolloff = 2.476e-01  # environmental impact of roll-off [tons CO2e/km]
-    env_tanker = 1.105e-01  # environmental impact of tanker [tons CO2e/km]
+    env_rolloff = 5.6402e-4  # environmental impact of roll-off [tons CO2e/km]
+    env_tanker = 1.0586e-4  # environmental impact of tanker [tons CO2e/km]
     CI_OCF = 4.463e-03  # construction impact of mech. plant [tons CO2e/ton]
     CI_MPF = 4.463e-03  # construction impact of mech. plant [tons CO2e/ton]
     CI_CPF = 0.651  # construction impact of chem. plant [tons CO2e/ton]
     CI_DPF = 2.813e-02  # construction impact of chem. plant [tons CO2e/ton]
-    OI_OCF = 1.246e-2  # operational impact of OCF [CO2e/ton]
-    OI_MPF = 3.116e-2  # operational impact of MPF [CO2e/ton]
+    OI_OCF = 1.250e-2  # operational impact of OCF [tons CO2e/ton]
+    OI_MPF = 3.575e-2  # operational impact of MPF [tons CO2e/ton]
     OI_CPF = 1.100  # operational impact of CPF [tons CO2e/ton]
     OI_DPF = 2.055  # operational impact of DPF [tons CO2e/ton]
-    # define estimated price of CO2
-    env_cost = 170  # cost of the environmental impact [euro/ton CO2e]
 
     def __init__(self, D1, D2, D3, D4, D5):
         """
@@ -86,12 +98,14 @@ class Infrastructure:
         S_Cologne and OCF_Cologne, for example.
         """
 
-        # initialise instance variables for distance matrices
-        self.D1 = D1
-        self.D2 = D2
-        self.D3 = D3
-        self.D4 = D4
-        self.D5 = D5
+        # initialise instance variables for distance matrices NOTE: multiplied
+        # by circuit factor, only needed if use straight-line distance as is
+        # currently being used
+        self.D1 = D1 * self.circuit_factor
+        self.D2 = D2 * self.circuit_factor
+        self.D3 = D3 * self.circuit_factor
+        self.D4 = D4 * self.circuit_factor
+        self.D5 = D5 * self.circuit_factor
         # initialise instance variables for sources, customers & facilities
         self.S = D1.index.tolist()
         self.OCF = D1.columns.tolist()
@@ -158,70 +172,115 @@ class Infrastructure:
         self.D = D
 
         # calculate total capital invesment cost wrt capacity [euro]
-        self.TCI_OCF = 0.057 * ((self.facility_cap["OCF"] / 0.384) ** 0.6) * (10**6)
-        self.TCI_MPF = 8 * ((self.facility_cap["MPF"] / 41.6) ** 0.6) * (10**6)
-        self.TCI_CPF = 20.2 * ((self.facility_cap["CPF"] / 110) ** 0.6) * (10**6)
-        self.TCI_DPF = 250 * ((self.facility_cap["DPF"] / 278) ** 0.6) * (10**6)
+        self.TCI_OCF = (
+            six_tenths_rule(
+                self.ref_capacity_OCF, self.facility_cap["OCF"], self.ref_CAPEX_OCF
+            )
+            * 10**6
+        )
+        self.TCI_MPF = (
+            six_tenths_rule(
+                self.ref_capacity_MPF, self.facility_cap["MPF"], self.ref_CAPEX_MPF
+            )
+            * 10**6
+        )
+        self.TCI_CPF = (
+            six_tenths_rule(
+                self.ref_capacity_CPF, self.facility_cap["CPF"], self.ref_CAPEX_CPF
+            )
+            * 10**6
+        )
+        self.TCI_DPF = (
+            six_tenths_rule(
+                self.ref_capacity_DPF, self.facility_cap["DPF"], self.ref_CAPEX_DPF
+            )
+            * 10**6
+        )
+
+        # calculate fixed OPEX wrt capacity [euro/day]
+        self.fOPEX_OCF = (
+            six_tenths_rule(
+                self.ref_capacity_OCF, self.facility_cap["OCF"], self.ref_fOPEX_OCF
+            )
+            * 10**6
+            / self.working_days
+        )
+        self.fOPEX_MPF = (
+            six_tenths_rule(
+                self.ref_capacity_MPF, self.facility_cap["MPF"], self.ref_fOPEX_MPF
+            )
+            * 10**6
+            / self.working_days
+        )
+        self.fOPEX_CPF = (
+            six_tenths_rule(
+                self.ref_capacity_CPF, self.facility_cap["CPF"], self.ref_fOPEX_CPF
+            )
+            * 10**6
+            / self.working_days
+        )
+        self.fOPEX_DPF = (
+            six_tenths_rule(
+                self.ref_capacity_DPF, self.facility_cap["DPF"], self.ref_fOPEX_DPF
+            )
+            * 10**6
+            / self.working_days
+        )
 
         # calculate annualized capital investment cost per day [euro/day]
-        self.fixed_OCF = (
+        self.ACI_OCF = (
             self.rate * self.TCI_OCF / (1 - (1 + self.rate) ** (-self.period)) / 360
         )
-        self.fixed_MPF = (
+        self.ACI_MPF = (
             self.rate * self.TCI_MPF / (1 - (1 + self.rate) ** (-self.period)) / 360
         )
-        self.fixed_CPF = (
+        self.ACI_CPF = (
             self.rate * self.TCI_CPF / (1 - (1 + self.rate) ** (-self.period)) / 360
         )
-        self.fixed_DPF = (
+        self.ACI_DPF = (
             self.rate * self.TCI_DPF / (1 - (1 + self.rate) ** (-self.period)) / 360
         )
 
         # calculate transportation costs [euro/(km*ton)]
-        # assume volume is limiting factor for ETICS in roll-off
+        # ETICS transported in roll-off, determine if volume- or load-limit
         self.TC_ETICS = (
             (self.fuel_price * self.fuel_cons + self.toll_cost)
-            + (self.driver_wage / self.driver_hours + self.vehicle_cost)
+            + (self.driver_wage / self.driver_hours + self.vehicle_cost_rollof)
             / self.avg_speed
-        ) / (self.rolloff_volume * self.rho_ETICS)
-        # assume load is limiting factor for compressed ETICS in roll-off
+        ) / min(self.rolloff_load, self.rolloff_volume * self.rho_ETICS)
+        # compressed ETICS transported in roll-off, determine if v- or l-limit
         self.TC_comp_ETICS = (
             (self.fuel_price * self.fuel_cons + self.toll_cost)
-            + (self.driver_wage / self.driver_hours + self.vehicle_cost)
+            + (self.driver_wage / self.driver_hours + self.vehicle_cost_rollof)
             / self.avg_speed
-        ) / self.rolloff_load
-        # assume load is limiting factor for pre-concentrate in roll-off
+        ) / min(self.rolloff_load, self.rolloff_volume * self.rho_compressed_ETICS)
+        # pre-concentrate transported in roll-off, determine if v- or l-limit
         self.TC_pre_concentrate = (
             (self.fuel_price * self.fuel_cons + self.toll_cost)
-            + (self.driver_wage / self.driver_hours + self.vehicle_cost_tanker)
+            + (self.driver_wage / self.driver_hours + self.vehicle_cost_rollof)
             / self.avg_speed
-        ) / self.rolloff_load
-        # assume volume is limiting factor pyrolysis oil in steel tanker
+        ) / min(self.rolloff_load, self.rolloff_volume * self.rho_pre_concentrate)
+        # pyrolysis oil transported in tanker, volume-limited
         self.TC_pyrolysis_oil = (
             (self.fuel_price * self.fuel_cons + self.toll_cost)
             + (self.driver_wage / self.driver_hours + self.vehicle_cost_tanker)
             / self.avg_speed
         ) / (self.tanker_volume * self.rho_pyrolysis_oil)
-        # assume volume is limiting factor for styrene in steel tanker
+        # styrene transported in tanker, volume-limited
         self.TC_styrene = (
             (self.fuel_price * self.fuel_cons + self.toll_cost)
-            + (self.driver_wage / self.driver_hours + self.vehicle_cost)
+            + (self.driver_wage / self.driver_hours + self.vehicle_cost_tanker)
             / self.avg_speed
         ) / (self.tanker_volume * self.rho_styrene)
 
         # calculate transportation environmental impact [tons CO2-eq/(km*ton)]
-        # assume volume is limiting factor for ETICS in roll-off
-        self.TI_ETICS = self.env_rolloff / (self.rolloff_volume * self.rho_ETICS)
-        # assume load is limiting factor for compressed ETICS in roll-off
-        self.TI_comp_ETICS = self.env_rolloff / self.rolloff_load
-        # assume load is limiting factor for pre-concentrate in roll-off
-        self.TI_pre_concentrate = self.env_rolloff / self.rolloff_load
-        # assume volume is limiting factor for pyrolysis oil in steel tanker
-        self.TI_pyrolysis_oil = self.env_tanker / (
-            self.tanker_volume * self.rho_pyrolysis_oil
-        )
-        # assume volume is limiting factor for styrene in steel tanker
-        self.TI_styrene = self.env_tanker / (self.tanker_volume * self.rho_styrene)
+        # ETICS, compressed ETICS and pre-concentrate transported in roll-off
+        self.TI_ETICS = self.env_rolloff
+        self.TI_comp_ETICS = self.env_rolloff
+        self.TI_pre_concentrate = self.env_rolloff
+        # pyrolysis oil and styrene transported in tanker
+        self.TI_pyrolysis_oil = self.env_tanker
+        self.TI_styrene = self.env_tanker
 
     def model_value_chain(self, weight_economic, weight_environmental):
         """
@@ -401,30 +460,42 @@ class Infrastructure:
                 for p in self.P
             )
             - (
-                gp.quicksum(self.fixed_OCF * b[j] for j in self.OCF)
-                + gp.quicksum(self.fixed_MPF * b[k] for k in self.MPF)
-                + gp.quicksum(self.fixed_CPF * b[l] for l in self.CPF)
-                + gp.quicksum(self.fixed_DPF * b[m] for m in self.DPF)
+                gp.quicksum(self.ACI_OCF * b[j] for j in self.OCF)
+                + gp.quicksum(self.ACI_MPF * b[k] for k in self.MPF)
+                + gp.quicksum(self.ACI_CPF * b[l] for l in self.CPF)
+                + gp.quicksum(self.ACI_DPF * b[m] for m in self.DPF)
             )
             - (
                 gp.quicksum(
-                    self.variable_OCF
-                    * gp.quicksum(x[p, i, j] for i in self.S for p in self.P)
+                    (
+                        self.fOPEX_OCF * b[j]
+                        + self.vOPEX_OCF
+                        * gp.quicksum(x[p, i, j] for i in self.S for p in self.P)
+                    )
                     for j in self.OCF
                 )
                 + gp.quicksum(
-                    self.variable_MPF
-                    * gp.quicksum(x[p, j, k] for j in self.OCF for p in self.P)
+                    (
+                        self.fOPEX_MPF * b[k]
+                        + self.vOPEX_MPF
+                        * gp.quicksum(x[p, j, k] for j in self.OCF for p in self.P)
+                    )
                     for k in self.MPF
                 )
                 + gp.quicksum(
-                    self.variable_CPF
-                    * gp.quicksum(x[p, k, l] for k in self.MPF for p in self.P)
+                    (
+                        self.fOPEX_CPF * b[l]
+                        + self.vOPEX_CPF
+                        * gp.quicksum(x[p, k, l] for k in self.MPF for p in self.P)
+                    )
                     for l in self.CPF
                 )
                 + gp.quicksum(
-                    self.variable_DPF
-                    * gp.quicksum(x[p, l, m] for l in self.CPF for p in self.P)
+                    (
+                        self.fOPEX_DPF * b[m]
+                        + self.vOPEX_DPF
+                        * gp.quicksum(x[p, l, m] for l in self.CPF for p in self.P)
+                    )
                     for m in self.DPF
                 )
             )
@@ -731,34 +802,45 @@ class Infrastructure:
             for n in self.C
         )
         # CAPEX of facilities in the value chain
-        self.capex_OCF = sum(self.fixed_OCF * vars[f"b({j})"] for j in self.OCF)
-        self.capex_MPF = sum(self.fixed_MPF * vars[f"b({k})"] for k in self.MPF)
-        self.capex_CPF = sum(self.fixed_CPF * vars[f"b({l})"] for l in self.CPF)
-        self.capex_DPF = sum(self.fixed_DPF * vars[f"b({m})"] for m in self.DPF)
+        self.capex_OCF = sum(self.ACI_OCF * vars[f"b({j})"] for j in self.OCF)
+        self.capex_MPF = sum(self.ACI_MPF * vars[f"b({k})"] for k in self.MPF)
+        self.capex_CPF = sum(self.ACI_CPF * vars[f"b({l})"] for l in self.CPF)
+        self.capex_DPF = sum(self.ACI_DPF * vars[f"b({m})"] for m in self.DPF)
         # OPEX of facilities int he value chain
         self.opex_OCF = sum(
-            self.variable_OCF
-            * sum(vars[f"x({p},{i},{j})"] for i in self.S for p in self.P)
+            (
+                self.fOPEX_OCF * vars[f"b({j})"]
+                + self.vOPEX_OCF
+                * sum(vars[f"x({p},{i},{j})"] for i in self.S for p in self.P)
+            )
             for j in self.OCF
         )
         self.opex_MPF = sum(
-            self.variable_MPF
-            * sum(vars[f"x({p},{j},{k})"] for j in self.OCF for p in self.P)
+            (
+                self.fOPEX_MPF * vars[f"b({k})"]
+                + self.vOPEX_MPF
+                * sum(vars[f"x({p},{j},{k})"] for j in self.OCF for p in self.P)
+            )
             for k in self.MPF
         )
         self.opex_CPF = sum(
-            self.variable_CPF
-            * sum(vars[f"x({p},{k},{l})"] for k in self.MPF for p in self.P)
+            (
+                self.fOPEX_CPF * vars[f"b({l})"]
+                + self.vOPEX_CPF
+                * sum(vars[f"x({p},{k},{l})"] for k in self.MPF for p in self.P)
+            )
             for l in self.CPF
         )
         self.opex_DPF = sum(
-            self.variable_DPF
-            * sum(vars[f"x({p},{l},{m})"] for l in self.CPF for p in self.P)
+            (
+                self.fOPEX_DPF * vars[f"b({m})"]
+                + self.vOPEX_DPF
+                * sum(vars[f"x({p},{l},{m})"] for l in self.CPF for p in self.P)
+            )
             for m in self.DPF
         )
 
         # compute individual elements of the environmental objective function
-        # transportation impact
         # transportation impact between S and OCF
         self.transportation_impact_1 = sum(
             2
@@ -837,6 +919,25 @@ class Infrastructure:
         self.operational_impact_DPF = sum(
             self.OI_DPF * sum(vars[f"x({p},{l},{m})"] for l in self.CPF for p in self.P)
             for m in self.DPF
+        )
+
+        # compute break-even price of styrene and the LCA's functional unit
+        self.styrene_amount = sum(
+            sum(vars[f"x({p},{m},{n})"] for m in self.DPF for p in self.P)
+            for n in self.C
+        )
+        self.break_even_price = (
+            abs(self.obj_economic - self.Revenue) / self.styrene_amount
+        )
+        self.functional_unit = (
+            self.obj_environmental / self.env_cost / self.styrene_amount
+        )
+        print(f"Amount of styrene produced: {self.styrene_amount:.2f} [ton]")
+        print(
+            f"Break-even price of styrene: {self.break_even_price:.2f} [euro/ton of styrene]"
+        )
+        print(
+            f"LCA functional unit: {self.functional_unit:.2f} [ton CO2eq/ton of styrene]"
         )
 
     def plot_infrastructure(self, country=None, img_path=None):
@@ -1395,7 +1496,7 @@ class Infrastructure:
 
         # plot the bar graphs for the economic values and save the figure
         ind = np.arange(N)
-        width = 0.5
+        width = 0.65
         fig, ax = plt.subplots(figsize=(8, 8))
         b1 = ax.bar(ind, ETICS, width, color=colours[0])
         b2 = ax.bar(ind, compressed_ETICS, width, bottom=ETICS, color=colours[1])
@@ -1431,7 +1532,12 @@ class Infrastructure:
                 "pyrolysis oil or CPF",
                 "styrene or DPF",
             ),
-            loc="upper right",
+            loc="upper left",
+        )
+        ax.set_title(
+            f"Total economic cost: {abs(self.obj_economic - self.Revenue):_.2f} euro/day".replace(
+                "_", "'"
+            )
         )
         fig.savefig("results/economic_objective_breakdown.pdf", dpi=1200)
 
@@ -1468,7 +1574,7 @@ class Infrastructure:
 
         # plot the bar graphs for the environmental values and save the figure
         ind = np.arange(N)
-        width = 0.35
+        width = 0.65
         fig, ax = plt.subplots(figsize=(8, 8))
         b1 = ax.bar(ind, ETICS, width, color=colours[0])
         b2 = ax.bar(ind, compressed_ETICS, width, bottom=ETICS, color=colours[1])
@@ -1504,7 +1610,12 @@ class Infrastructure:
                 "pyrolysis oil or CPF",
                 "styrene or DPF",
             ),
-            loc="upper right",
+            loc="upper left",
+        )
+        ax.set_title(
+            f"Total environmental impact: {self.obj_environmental/self.env_cost:_.2f} tons CO2-eq/day".replace(
+                "_", "'"
+            )
         )
         fig.savefig("results/environmental_objective_breakdown.pdf", dpi=1200)
 
@@ -1545,7 +1656,7 @@ class Infrastructure:
             filtered = product_flows[product_flows["Destination"] == name]
             for _, row in filtered.iterrows():
                 OCF_amount += row["Amount"]
-            OCF_installed = vars[f"b({name})"]
+            OCF_installed = abs(vars[f"b({name})"])
             OCF_entry = f"{OCF_amount:.1f} ({OCF_installed:.0f} * {self.facility_cap['OCF']:.1f})"
             OCF_entry_val = OCF_amount
 
@@ -1555,7 +1666,7 @@ class Infrastructure:
             filtered = product_flows[product_flows["Destination"] == name]
             for _, row in filtered.iterrows():
                 MPF_amount += row["Amount"]
-            MPF_installed = vars[f"b({name})"]
+            MPF_installed = abs(vars[f"b({name})"])
             MPF_entry = f"{MPF_amount:.1f} ({MPF_installed:.0f} * {self.facility_cap['MPF']:.1f})"
             MPF_entry_val = MPF_amount
 
@@ -1565,7 +1676,7 @@ class Infrastructure:
             filtered = product_flows[product_flows["Destination"] == name]
             for _, row in filtered.iterrows():
                 CPF_amount += row["Amount"]
-            CPF_installed = vars[f"b({name})"]
+            CPF_installed = abs(vars[f"b({name})"])
             CPF_entry = f"{CPF_amount:.1f} ({CPF_installed:.0f} * {self.facility_cap['CPF']:.1f})"
             CPF_entry_val = CPF_amount
 
@@ -1575,7 +1686,7 @@ class Infrastructure:
             filtered = product_flows[product_flows["Destination"] == name]
             for _, row in filtered.iterrows():
                 DPF_amount += row["Amount"]
-            DPF_installed = vars[f"b({name})"]
+            DPF_installed = abs(vars[f"b({name})"])
             DPF_entry = f"{DPF_amount:.1f} ({DPF_installed:.0f} * {self.facility_cap['DPF']:.1f})"
             DPF_entry_val = DPF_amount
 
@@ -1622,8 +1733,55 @@ class Infrastructure:
         )
 
         # generate Seaborn heatmap
-        sns.heatmap(tabulated_product_flow_val, annot=True, cmap="Reds")
+        plt.clf()
+        sns.heatmap(
+            tabulated_product_flow_val,
+            annot=True,
+            cmap="Reds",
+            yticklabels=tabulated_product_flow_val.index[::-1],
+        )
         plt.savefig("results/tabulated_product_flow_heatmap.pdf", dpi=1200)
+
+
+@staticmethod
+def six_tenths_rule(reference_capacity, target_capacity, reference_cost):
+    """
+    Apply the six-tenths rule to approximate the cost ``target_cost`` for a
+    ``target_capacity`` using known ``reference_cost`` for a
+    ``reference_capacity``. The function is only reliable if the
+    ``target_capacity`` and ``reference_capacity`` differ by a factor which is
+    smaller than 10.
+
+    Parameters
+    ----------
+    reference_capacity (float): capacity of the facility being used as a
+    reference [ton/day]
+
+    target_capacity (float): capacity of the upscaledd or downscaled facility
+    for which we want to determine the CAPEX [ton/day]
+
+    reference_cost (float): cost of the reference facility [Meuro]
+
+    Returns
+    -------
+    target_cost (float): cost of the upscaled or downscaled facility [Meuro]
+
+    NOTE: The function will exit the code instance and print a warning to the
+    user in the case that it is being used within a range where the method is no
+    longer considered to provide a reliable approximation.
+    """
+
+    ratio = reference_capacity / target_capacity
+
+    if ratio > 10 or ratio < 0.1:
+        print(
+            f"WARNING: You are using the six-tenths rule to scale-up or scale-down cost for capacities that differ by a factor of {ratio:.2f}. This method cannot be used beyond a factor of 10."
+        )
+        sys.exit()
+
+    target_cost = reference_cost * (target_capacity / reference_capacity) ** 0.6
+
+    return target_cost
 
 
 @staticmethod
