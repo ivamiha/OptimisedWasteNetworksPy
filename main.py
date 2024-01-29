@@ -124,8 +124,8 @@ yield_factor = {
 facility_capacity = {
     "OCF": 140 / working_days,
     "MPF": 3000 / working_days,
-    "CPF": 4000 / working_days,
-    "DPF": 16500 / working_days,
+    "CPF": 3960 / working_days,
+    "DPF": 14850 / working_days,
 }
 
 # initiate ``Infrastructure`` class based on distances from building network

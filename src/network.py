@@ -87,7 +87,12 @@ def region_generator(length, n, customers_list):
     for k, v in customers.iterrows():
         ax2.annotate(k, v, textcoords="offset points", xytext=(0, 10), ha="center")
     # save as vector graphics and show to user
-    fig.savefig("results/sources_and_sinks.pdf", dpi=1200)
+    fig.savefig(
+        "results/sources_and_sinks.pdf",
+        dpi=1200,
+        bbox_inches="tight",
+        pad_inches=0.1,
+    )
     plt.show()
 
     # calculate Eucledian distances between all point pairs & save to csv
@@ -236,7 +241,12 @@ def region_builder(sources_coords, customers_list, country=None, img_path=None):
         ax1.imshow(background_img, zorder=0, extent=[x_min, x_max, y_min, y_max])
         ax2.imshow(background_img, zorder=0, extent=[x_min, x_max, y_min, y_max])
     # save as vector graphics and show to user
-    fig.savefig("results/sources_and_sinks.pdf", dpi=1200)
+    fig.savefig(
+        "results/sources_and_sinks.pdf",
+        dpi=1200,
+        bbox_inches="tight",
+        pad_inches=0.1,
+    )
     plt.show()
 
     # calculate Eucledian distances between all point pairs & save to csv

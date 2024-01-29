@@ -44,34 +44,34 @@ class Infrastructure:
     rho_styrene = 0.910  # density of styrene [ton/m^3]
     # define economic variables
     ref_CAPEX_OCF = 0.057  # CAPEX of OCF for reference capacity [Meuro]
-    ref_CAPEX_MPF = 8  # CAPEX of MPF for reference capacity [Meuro]
-    ref_CAPEX_CPF = 20.2  # CAPEX of CPF for reference capacity [Meuro]
-    ref_CAPEX_DPF = 0.9  # CAPEX of DPF for reference capacity [Meuro]
+    ref_CAPEX_MPF = 8.0  # CAPEX of MPF for reference capacity [Meuro]
+    ref_CAPEX_CPF = 10.11  # CAPEX of CPF for reference capacity [Meuro]
+    ref_CAPEX_DPF = 5.17  # CAPEX of DPF for reference capacity [Meuro]
     ref_capacity_OCF = 140 / working_days  # OCF reference capacity [ton/day]
     ref_capacity_MPF = 15000 / working_days  # MPF reference capacity [ton/day]
-    ref_capacity_CPF = 40000 / working_days  # CPF reference capacity [ton/day]
-    ref_capacity_DPF = 33000 / working_days  # DPF reference capacity [ton/day]
+    ref_capacity_CPF = 3960 / working_days  # CPF reference capacity [ton/day]
+    ref_capacity_DPF = 14850 / working_days  # DPF reference capacity [ton/day]
     ref_fOPEX_OCF = 0.012  # reference fixed OPEX of OCF [Meuro/year]
     ref_fOPEX_MPF = 1.1  # reference fixed OPEX of MPF [Meuro/year]
-    ref_fOPEX_CPF = 1.7  # reference fixed OPEX of CPF [Meuro/year]
-    ref_fOPEX_DPF = 4.7  # reference fixed OPEX of DPF [Meuro/year]
+    ref_fOPEX_CPF = 1.21  # reference fixed OPEX of CPF [Meuro/year]
+    ref_fOPEX_DPF = 0.62  # reference fixed OPEX of DPF [Meuro/year]
     vOPEX_OCF = 11  # variable OPEX of OCF [euro/ton]
     vOPEX_MPF = 46  # variable OPEX of MPF [euro/ton]
-    vOPEX_CPF = 44  # variable OPEX of CPF [euro/ton]
-    vOPEX_DPF = 97  # variable OPEX of DPF [euro/ton]
+    vOPEX_CPF = 108.68  # variable OPEX of CPF [euro/ton]
+    vOPEX_DPF = 57.77  # variable OPEX of DPF [euro/ton]
     period = 10  # loan period [years]
     rate = 0.10  # discount rate []
     # define environmental impact variables
     env_rolloff = 5.6402e-4  # environmental impact of roll-off [tons CO2e/km]
     env_tanker = 1.0586e-4  # environmental impact of tanker [tons CO2e/km]
-    CI_OCF = 4.463e-03  # construction impact of mech. plant [tons CO2e/ton]
-    CI_MPF = 4.463e-03  # construction impact of mech. plant [tons CO2e/ton]
-    CI_CPF = 0.651  # construction impact of chem. plant [tons CO2e/ton]
-    CI_DPF = 2.813e-02  # construction impact of chem. plant [tons CO2e/ton]
+    CI_OCF = 2.808e-5  # construction impact of mech. plant [tons CO2e/ton]
+    CI_MPF = 4.303e-3  # construction impact of mech. plant [tons CO2e/ton]
+    CI_CPF = 0.816  # construction impact of chem. plant [tons CO2e/ton]
+    CI_DPF = 0.218  # construction impact of chem. plant [tons CO2e/ton]
     OI_OCF = 1.250e-2  # operational impact of OCF [tons CO2e/ton]
     OI_MPF = 3.575e-2  # operational impact of MPF [tons CO2e/ton]
-    OI_CPF = 1.100  # operational impact of CPF [tons CO2e/ton]
-    OI_DPF = 2.055  # operational impact of DPF [tons CO2e/ton]
+    OI_CPF = 0.524  # operational impact of CPF [tons CO2e/ton]
+    OI_DPF = 1.156  # operational impact of DPF [tons CO2e/ton]
 
     def __init__(self, D1, D2, D3, D4, D5):
         """
@@ -229,16 +229,28 @@ class Infrastructure:
 
         # calculate annualized capital investment cost per day [euro/day]
         self.ACI_OCF = (
-            self.rate * self.TCI_OCF / (1 - (1 + self.rate) ** (-self.period)) / 360
+            self.rate
+            * self.TCI_OCF
+            / (1 - (1 + self.rate) ** (-self.period))
+            / self.working_days
         )
         self.ACI_MPF = (
-            self.rate * self.TCI_MPF / (1 - (1 + self.rate) ** (-self.period)) / 360
+            self.rate
+            * self.TCI_MPF
+            / (1 - (1 + self.rate) ** (-self.period))
+            / self.working_days
         )
         self.ACI_CPF = (
-            self.rate * self.TCI_CPF / (1 - (1 + self.rate) ** (-self.period)) / 360
+            self.rate
+            * self.TCI_CPF
+            / (1 - (1 + self.rate) ** (-self.period))
+            / self.working_days
         )
         self.ACI_DPF = (
-            self.rate * self.TCI_DPF / (1 - (1 + self.rate) ** (-self.period)) / 360
+            self.rate
+            * self.TCI_DPF
+            / (1 - (1 + self.rate) ** (-self.period))
+            / self.working_days
         )
 
         # calculate transportation costs [euro/(km*ton)]
@@ -1079,12 +1091,13 @@ class Infrastructure:
             plt.gca().add_artist(ab)
         # set plot title
         plt.title(
-            f"Net profit: {self.obj_economic:_.2f} euro/day\nEnv. impact: {self.obj_environmental/self.env_cost:_.2f} tons CO2-eq/day".replace(
+            f"SY break-even price: {self.break_even_price:_.2f} [euro/ton SY]\nLCA functional unit: {self.functional_unit:_.2f} [ton CO2eq/ton SY]".replace(
                 "_", "'"
             )
         )
-        # plot and save the figure
-        fig.savefig("results/infrastructure.pdf", dpi=1200)
+        fig.savefig(
+            "results/infrastructure.pdf", dpi=1200, bbox_inches="tight", pad_inches=0.1
+        )
 
     def plot_product_flow(self, country=None, img_path=None, layered=False):
         """
@@ -1329,11 +1342,13 @@ class Infrastructure:
             frameon=False,
         )
         plt.title(
-            f"Net profit: {self.obj_economic:_.2f} euro/day\nEnv. impact: {self.obj_environmental/self.env_cost:_.2f} tons CO2-eq/day".replace(
+            f"SY break-even price: {self.break_even_price:_.2f} [euro/ton SY]\nLCA functional unit: {self.functional_unit:_.2f} [ton CO2eq/ton SY]".replace(
                 "_", "'"
             )
         )
-        fig.savefig("results/product_flow.pdf", dpi=1200)
+        fig.savefig(
+            "results/product_flow.pdf", dpi=1200, bbox_inches="tight", pad_inches=0.1
+        )
 
         # create layered figure if specified
         if layered:
@@ -1441,7 +1456,7 @@ class Infrastructure:
                 )
                 plt.title(title)
                 file_name = f"results/product_flow_layer{layer}.pdf"
-                fig.savefig(file_name, dpi=1200)
+                fig.savefig(file_name, dpi=1200, bbox_inches="tight", pad_inches=0.1)
 
     def plot_objective_function_breakdown(self):
         """
@@ -1539,7 +1554,12 @@ class Infrastructure:
                 "_", "'"
             )
         )
-        fig.savefig("results/economic_objective_breakdown.pdf", dpi=1200)
+        fig.savefig(
+            "results/economic_objective_breakdown.pdf",
+            dpi=1200,
+            bbox_inches="tight",
+            pad_inches=0.1,
+        )
 
         # clear the figure
         plt.clf()
@@ -1617,7 +1637,12 @@ class Infrastructure:
                 "_", "'"
             )
         )
-        fig.savefig("results/environmental_objective_breakdown.pdf", dpi=1200)
+        fig.savefig(
+            "results/environmental_objective_breakdown.pdf",
+            dpi=1200,
+            bbox_inches="tight",
+            pad_inches=0.1,
+        )
 
     def tabulate_product_flows(self):
         """
@@ -1731,7 +1756,6 @@ class Infrastructure:
             ["pdflatex", "-output-directory=" + directory, filename],
             stdout=subprocess.PIPE,
         )
-
         # generate Seaborn heatmap
         plt.clf()
         sns.heatmap(
@@ -1740,7 +1764,12 @@ class Infrastructure:
             cmap="Reds",
             yticklabels=tabulated_product_flow_val.index[::-1],
         )
-        plt.savefig("results/tabulated_product_flow_heatmap.pdf", dpi=1200)
+        plt.savefig(
+            "results/tabulated_product_flow_heatmap.pdf",
+            dpi=1200,
+            bbox_inches="tight",
+            pad_inches=0.1,
+        )
 
 
 @staticmethod
