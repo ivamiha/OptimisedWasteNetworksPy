@@ -1,8 +1,12 @@
 import os
-import src.network as network
-import src.optimisation as optimisation
+import sys
 import pandas as pd
 import numpy as np
+
+# set execution directory to package home + import package-related methods
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import src.network as network
+import src.optimisation as optimisation
 import utils.get_coords as gc
 import utils.convert_coords as cc
 
