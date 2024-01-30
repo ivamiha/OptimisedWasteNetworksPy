@@ -1,0 +1,668 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
+<meta name="generator" content="pdoc 0.10.0" />
+<title>OptimisedWasteNetworksPy.src.network API documentation</title>
+<meta name="description" content="" />
+<link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/sanitize.min.css" integrity="sha256-PK9q560IAAa6WVRRh76LtCaI8pjTJ2z11v0miyNNjrs=" crossorigin>
+<link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/11.0.1/typography.min.css" integrity="sha256-7l/o7C8jubJiy74VsKTidCy1yBkRtiUGbVkYBylBqUg=" crossorigin>
+<link rel="stylesheet preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/styles/github.min.css" crossorigin>
+<style>:root{--highlight-color:#fe9}.flex{display:flex !important}body{line-height:1.5em}#content{padding:20px}#sidebar{padding:30px;overflow:hidden}#sidebar > *:last-child{margin-bottom:2cm}.http-server-breadcrumbs{font-size:130%;margin:0 0 15px 0}#footer{font-size:.75em;padding:5px 30px;border-top:1px solid #ddd;text-align:right}#footer p{margin:0 0 0 1em;display:inline-block}#footer p:last-child{margin-right:30px}h1,h2,h3,h4,h5{font-weight:300}h1{font-size:2.5em;line-height:1.1em}h2{font-size:1.75em;margin:1em 0 .50em 0}h3{font-size:1.4em;margin:25px 0 10px 0}h4{margin:0;font-size:105%}h1:target,h2:target,h3:target,h4:target,h5:target,h6:target{background:var(--highlight-color);padding:.2em 0}a{color:#058;text-decoration:none;transition:color .3s ease-in-out}a:hover{color:#e82}.title code{font-weight:bold}h2[id^="header-"]{margin-top:2em}.ident{color:#900}pre code{background:#f8f8f8;font-size:.8em;line-height:1.4em}code{background:#f2f2f1;padding:1px 4px;overflow-wrap:break-word}h1 code{background:transparent}pre{background:#f8f8f8;border:0;border-top:1px solid #ccc;border-bottom:1px solid #ccc;margin:1em 0;padding:1ex}#http-server-module-list{display:flex;flex-flow:column}#http-server-module-list div{display:flex}#http-server-module-list dt{min-width:10%}#http-server-module-list p{margin-top:0}.toc ul,#index{list-style-type:none;margin:0;padding:0}#index code{background:transparent}#index h3{border-bottom:1px solid #ddd}#index ul{padding:0}#index h4{margin-top:.6em;font-weight:bold}@media (min-width:200ex){#index .two-column{column-count:2}}@media (min-width:300ex){#index .two-column{column-count:3}}dl{margin-bottom:2em}dl dl:last-child{margin-bottom:4em}dd{margin:0 0 1em 3em}#header-classes + dl > dd{margin-bottom:3em}dd dd{margin-left:2em}dd p{margin:10px 0}.name{background:#eee;font-weight:bold;font-size:.85em;padding:5px 10px;display:inline-block;min-width:40%}.name:hover{background:#e0e0e0}dt:target .name{background:var(--highlight-color)}.name > span:first-child{white-space:nowrap}.name.class > span:nth-child(2){margin-left:.4em}.inherited{color:#999;border-left:5px solid #eee;padding-left:1em}.inheritance em{font-style:normal;font-weight:bold}.desc h2{font-weight:400;font-size:1.25em}.desc h3{font-size:1em}.desc dt code{background:inherit}.source summary,.git-link-div{color:#666;text-align:right;font-weight:400;font-size:.8em;text-transform:uppercase}.source summary > *{white-space:nowrap;cursor:pointer}.git-link{color:inherit;margin-left:1em}.source pre{max-height:500px;overflow:auto;margin:0}.source pre code{font-size:12px;overflow:visible}.hlist{list-style:none}.hlist li{display:inline}.hlist li:after{content:',\2002'}.hlist li:last-child:after{content:none}.hlist .hlist{display:inline;padding-left:1em}img{max-width:100%}td{padding:0 .5em}.admonition{padding:.1em .5em;margin-bottom:1em}.admonition-title{font-weight:bold}.admonition.note,.admonition.info,.admonition.important{background:#aef}.admonition.todo,.admonition.versionadded,.admonition.tip,.admonition.hint{background:#dfd}.admonition.warning,.admonition.versionchanged,.admonition.deprecated{background:#fd4}.admonition.error,.admonition.danger,.admonition.caution{background:lightpink}</style>
+<style media="screen and (min-width: 700px)">@media screen and (min-width:700px){#sidebar{width:30%;height:100vh;overflow:auto;position:sticky;top:0}#content{width:70%;max-width:100ch;padding:3em 4em;border-left:1px solid #ddd}pre code{font-size:1em}.item .name{font-size:1em}main{display:flex;flex-direction:row-reverse;justify-content:flex-end}.toc ul ul,#index ul{padding-left:1.5em}.toc > ul > li{margin-top:.5em}}</style>
+<style media="print">@media print{#sidebar h1{page-break-before:always}.source{display:none}}@media print{*{background:transparent !important;color:#000 !important;box-shadow:none !important;text-shadow:none !important}a[href]:after{content:" (" attr(href) ")";font-size:90%}a[href][title]:after{content:none}abbr[title]:after{content:" (" attr(title) ")"}.ir a:after,a[href^="javascript:"]:after,a[href^="#"]:after{content:""}pre,blockquote{border:1px solid #999;page-break-inside:avoid}thead{display:table-header-group}tr,img{page-break-inside:avoid}img{max-width:100% !important}@page{margin:0.5cm}p,h2,h3{orphans:3;widows:3}h1,h2,h3,h4,h5,h6{page-break-after:avoid}}</style>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/highlight.min.js" integrity="sha256-Uv3H6lx7dJmRfRvH8TH6kJD1TSK1aFcwgx+mdg3epi8=" crossorigin></script>
+<script>window.addEventListener('DOMContentLoaded', () => hljs.initHighlighting())</script>
+</head>
+<body>
+<main>
+<article id="content">
+<header>
+<h1 class="title">Module <code>OptimisedWasteNetworksPy.src.network</code></h1>
+</header>
+<section id="section-intro">
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">import numpy as np
+import pandas as pd
+import scipy.spatial as sp
+import matplotlib.pyplot as plt
+import utils.get_coords as gc
+import utils.convert_coords as cc
+
+
+def region_generator(length, n, customers_list):
+    &#34;&#34;&#34;
+    Generates fictional region represented by a square whose sides measure
+    ``length`` with ``n`` equidistant nodes placed along them. Eucledian
+    distances utilised throughout.
+
+    Parameters
+    ----------
+    length (float): length of a side of the square region [km]
+
+    n (int): number of nodes along each side of the square region []
+
+    customers_list (arr): array with node number corresponding to customers in
+    the region
+
+    Returns
+    -------
+    D (arr): array containing DataFrames representing distances between
+    facilities
+    &#34;&#34;&#34;
+
+    # build x and y vectors representing nodes in the region
+    x = np.linspace(0, length, n)
+    y = np.linspace(0, length, n)
+    x_vector, y_vector = np.meshgrid(x, y)
+
+    # convert vectors into coordinates and store in array ``points``
+    points = []
+    for i in range(n):
+        for j in range(n):
+            points.append([x_vector[i, j], y_vector[i, j]])
+    # build list for each facility type containing indices of all nodes
+    i_list, j_list, k_list, l_list, m_list = [], [], [], [], []
+    for idx in range(0, n * n):
+        i_list.append(&#34;S_&#34; + str(idx))
+        j_list.append(&#34;OCF_&#34; + str(idx))
+        k_list.append(&#34;MPF_&#34; + str(idx))
+        l_list.append(&#34;CPF_&#34; + str(idx))
+        m_list.append(&#34;DPF_&#34; + str(idx))
+    # do the same for all nodes containing customers
+    n_list = []
+    for num in customers_list:
+        n_list.append(&#34;C_&#34; + str(num))
+
+    # create DataFrame containing sources and export it to csv file
+    sources = pd.DataFrame(points, columns=[&#34;xcord&#34;, &#34;ycord&#34;])
+    sources.to_csv(&#34;results/coordinates_sources.csv&#34;, float_format=&#34;%.3f&#34;)
+
+    # create DataFrame containing customers and export it to csv file
+    w, z = [], []
+    for i in customers_list:
+        w.append(sources.loc[i][&#34;xcord&#34;])
+        z.append(sources.loc[i][&#34;ycord&#34;])
+    w = np.array(w).reshape(-1, 1)
+    z = np.array(z).reshape(-1, 1)
+    customers = pd.DataFrame(
+        np.concatenate((w, z), axis=1), columns=[&#34;xcord&#34;, &#34;ycord&#34;], index=customers_list
+    )
+    customers.to_csv(&#34;results/coordinates_customers.csv&#34;, float_format=&#34;%.3f&#34;)
+
+    # plot resulting fictional region
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 8))
+    # plot sources in the fictional region
+    sources.plot(ax=ax1, kind=&#34;scatter&#34;, x=&#34;xcord&#34;, y=&#34;ycord&#34;, color=&#34;k&#34;)
+    ax1.set_xlabel(&#34;Horizontal distance [km]&#34;)
+    ax1.set_ylabel(&#34;Vertical distance [km]&#34;)
+    ax1.set_xlim(-length * 0.3, length * 1.3)
+    ax1.set_ylim(-length * 0.3, length * 1.3)
+    ax1.set_title(&#34;Source locations&#34;)
+    for k, v in sources.iterrows():
+        ax1.annotate(k, v, textcoords=&#34;offset points&#34;, xytext=(0, 10), ha=&#34;center&#34;)
+    # plot customers in fictional region
+    customers.plot(ax=ax2, kind=&#34;scatter&#34;, x=&#34;xcord&#34;, y=&#34;ycord&#34;, color=&#34;b&#34;)
+    ax2.set_xlabel(&#34;Horizontal distance [km]&#34;)
+    ax2.set_ylabel(&#34;Vertical distance [km]&#34;)
+    ax2.set_xlim(-length * 0.3, length * 1.3)
+    ax2.set_ylim(-length * 0.3, length * 1.3)
+    ax2.set_title(&#34;Customer locations&#34;)
+    for k, v in customers.iterrows():
+        ax2.annotate(k, v, textcoords=&#34;offset points&#34;, xytext=(0, 10), ha=&#34;center&#34;)
+    # save as vector graphics and show to user
+    fig.savefig(
+        &#34;results/sources_and_sinks.pdf&#34;,
+        dpi=1200,
+        bbox_inches=&#34;tight&#34;,
+        pad_inches=0.1,
+    )
+    plt.show()
+
+    # calculate Eucledian distances between all point pairs &amp; save to csv
+    D1 = pd.DataFrame(
+        sp.distance_matrix(sources.values, sources.values), index=i_list, columns=j_list
+    )
+    D1.to_csv(r&#34;results/D1.csv&#34;, float_format=&#34;%.3f&#34;)
+    D2 = pd.DataFrame(
+        sp.distance_matrix(sources.values, sources.values), index=j_list, columns=k_list
+    )
+    D2.to_csv(&#34;results/D2.csv&#34;, float_format=&#34;%.2f&#34;)
+    D3 = pd.DataFrame(
+        sp.distance_matrix(sources.values, sources.values), index=k_list, columns=l_list
+    )
+    D3.to_csv(&#34;results/D3.csv&#34;, float_format=&#34;%.2f&#34;)
+    D4 = pd.DataFrame(
+        sp.distance_matrix(sources.values, sources.values), index=l_list, columns=m_list
+    )
+    D4.to_csv(&#34;results/D4.csv&#34;, float_format=&#34;%.2f&#34;)
+    D5 = pd.DataFrame(
+        sp.distance_matrix(sources.values, customers.values),
+        index=m_list,
+        columns=n_list,
+    )
+    D5.to_csv(&#34;results/D5.csv&#34;, float_format=&#34;%.2f&#34;)
+
+    # return distance matrices in array format
+    D = [D1, D2, D3, D4, D5]
+    return D
+
+
+def region_builder(sources_coords, customers_list, country=None, img_path=None):
+    &#34;&#34;&#34;
+    Build the region that is defined by the coordinates in ``sources_coords``
+    and ``customer_coords``. Eucledian distances are measured using kilometeres
+    as units.
+
+    Parameters
+    ----------
+    sources_coords (arr): array consisting of [x_coord, y_coord] entries for the
+    sources within the region
+
+    customers_coords (arr): array consisting of [x_coord, y_coord] entries for
+    the customers within the region
+
+    country (str): optional string containing name of the considered country in
+    english, used to obtain the country&#39;s centre and extremes (northmost,
+    southmost, eastmost, westmost) for setting plot limits
+
+    img_path (str): optional string containing the location of the image file
+    which (if specified) will be used as a background for the generated plot, REQUIRES ``country`` to be specified as well
+
+    Returns
+    -------
+    D (arr): array containing DataFrames representing distances between
+    facilities
+    &#34;&#34;&#34;
+
+    # build list for each facility type containing indices of all nodes
+    i_list, j_list, k_list, l_list, m_list = [], [], [], [], []
+    for idx in range(0, len(sources_coords)):
+        i_list.append(&#34;S_&#34; + str(idx))
+        j_list.append(&#34;OCF_&#34; + str(idx))
+        k_list.append(&#34;MPF_&#34; + str(idx))
+        l_list.append(&#34;CPF_&#34; + str(idx))
+        m_list.append(&#34;DPF_&#34; + str(idx))
+    # do the same for all nodes containing customers
+    n_list = []
+    for num in customers_list:
+        n_list.append(&#34;C_&#34; + str(num))
+
+    # create DataFrame containing sources and export it to csv file
+    sources = pd.DataFrame(sources_coords, columns=[&#34;xcord&#34;, &#34;ycord&#34;])
+    sources.to_csv(&#34;results/coordinates_sources.csv&#34;, float_format=&#34;%.3f&#34;)
+
+    # create DataFrame containing customers and export it to csv file
+    w, z = [], []
+    for i in customers_list:
+        w.append(sources.loc[i][&#34;xcord&#34;])
+        z.append(sources.loc[i][&#34;ycord&#34;])
+    w = np.array(w).reshape(-1, 1)
+    z = np.array(z).reshape(-1, 1)
+    customers = pd.DataFrame(
+        np.concatenate((w, z), axis=1), columns=[&#34;xcord&#34;, &#34;ycord&#34;], index=customers_list
+    )
+    customers.to_csv(&#34;results/coordinates_customers.csv&#34;, float_format=&#34;%.3f&#34;)
+
+    # obtain plot limits using geocoder if ``country`` is specified
+    if country != None:
+        # obtain corresponding lats and lngs using Nominatim geocoder
+        centre = gc.get_country_coords(country)
+        bounding_box = gc.get_country_coords(country, output_as=&#34;boundingbox&#34;)
+        # calculate x and y distances to the bottom left and top right corners
+        bottom_left = cc.coords_to_distances(
+            (bounding_box[0], bounding_box[2]), (centre[0], centre[1])
+        )
+        top_right = cc.coords_to_distances(
+            (bounding_box[1], bounding_box[3]), (centre[0], centre[1])
+        )
+        # extract the required extents for the plot
+        x_min = bottom_left[0]
+        x_max = top_right[0]
+        y_min = bottom_left[1]
+        y_max = top_right[1]
+    # otherwise, obtain plot limits based on plotted data
+    else:
+        x_vals = [sub_array[0] for sub_array in sources_coords]
+        y_vals = [sub_array[1] for sub_array in sources_coords]
+        length_x = max(x_vals) - min(x_vals)
+        length_y = max(y_vals) - min(y_vals)
+
+    # plot resulting region
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 8))
+    # plot sources in the region
+    sources.plot(ax=ax1, kind=&#34;scatter&#34;, x=&#34;xcord&#34;, y=&#34;ycord&#34;, color=&#34;k&#34;)
+    ax1.set_xlabel(&#34;Horizontal distance [km]&#34;)
+    ax1.set_ylabel(&#34;Vertical distance [km]&#34;)
+    ax1.set_title(&#34;Source locations&#34;)
+    for k, v in sources.iterrows():
+        ax1.annotate(
+            k, v, textcoords=&#34;offset points&#34;, xytext=(0, 10), ha=&#34;center&#34;, zorder=1
+        )
+    # plot customers in region
+    customers.plot(ax=ax2, kind=&#34;scatter&#34;, x=&#34;xcord&#34;, y=&#34;ycord&#34;, color=&#34;b&#34;)
+    ax2.set_xlabel(&#34;Horizontal distance [km]&#34;)
+    ax2.set_ylabel(&#34;Vertical distance [km]&#34;)
+    ax2.set_title(&#34;Customer locations&#34;)
+    for k, v in customers.iterrows():
+        ax2.annotate(
+            k, v, textcoords=&#34;offset points&#34;, xytext=(0, 10), ha=&#34;center&#34;, zorder=1
+        )
+    # set corresponding limits to both plots
+    if country != None:
+        ax1.set_xlim(x_min * 1.2, x_max * 1.2)
+        ax1.set_ylim(y_min * 1.2, y_max * 1.2)
+        ax2.set_xlim(ax1.get_xlim())
+        ax2.set_ylim(ax1.get_ylim())
+    else:
+        ax1.set_xlim(min(x_vals) - length_x * 0.2, max(x_vals) + length_x * 0.2)
+        ax1.set_ylim(min(y_vals) - length_y * 0.2, max(y_vals) + length_y * 0.2)
+        ax2.set_xlim(ax1.get_xlim())
+        ax2.set_ylim(ax1.get_ylim())
+    # set background image if ``img_path`` has been provided
+    if img_path != None and country != None:
+        background_img = plt.imread(img_path)
+        ax1.imshow(background_img, zorder=0, extent=[x_min, x_max, y_min, y_max])
+        ax2.imshow(background_img, zorder=0, extent=[x_min, x_max, y_min, y_max])
+    # save as vector graphics and show to user
+    fig.savefig(
+        &#34;results/sources_and_sinks.pdf&#34;,
+        dpi=1200,
+        bbox_inches=&#34;tight&#34;,
+        pad_inches=0.1,
+    )
+    plt.show()
+
+    # calculate Eucledian distances between all point pairs &amp; save to csv
+    D1 = pd.DataFrame(
+        sp.distance_matrix(sources.values, sources.values), index=i_list, columns=j_list
+    )
+    D1.to_csv(r&#34;results/D1.csv&#34;, float_format=&#34;%.3f&#34;)
+    D2 = pd.DataFrame(
+        sp.distance_matrix(sources.values, sources.values), index=j_list, columns=k_list
+    )
+    D2.to_csv(&#34;results/D2.csv&#34;, float_format=&#34;%.2f&#34;)
+    D3 = pd.DataFrame(
+        sp.distance_matrix(sources.values, sources.values), index=k_list, columns=l_list
+    )
+    D3.to_csv(&#34;results/D3.csv&#34;, float_format=&#34;%.2f&#34;)
+    D4 = pd.DataFrame(
+        sp.distance_matrix(sources.values, sources.values), index=l_list, columns=m_list
+    )
+    D4.to_csv(&#34;results/D4.csv&#34;, float_format=&#34;%.2f&#34;)
+    D5 = pd.DataFrame(
+        sp.distance_matrix(sources.values, customers.values),
+        index=m_list,
+        columns=n_list,
+    )
+    D5.to_csv(&#34;results/D5.csv&#34;, float_format=&#34;%.2f&#34;)
+
+    # return distance matrices in array format
+    D = [D1, D2, D3, D4, D5]
+    return D</code></pre>
+</details>
+</section>
+<section>
+</section>
+<section>
+</section>
+<section>
+<h2 class="section-title" id="header-functions">Functions</h2>
+<dl>
+<dt id="OptimisedWasteNetworksPy.src.network.region_builder"><code class="name flex">
+<span>def <span class="ident">region_builder</span></span>(<span>sources_coords, customers_list, country=None, img_path=None)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Build the region that is defined by the coordinates in <code>sources_coords</code>
+and <code>customer_coords</code>. Eucledian distances are measured using kilometeres
+as units.</p>
+<h2 id="parameters">Parameters</h2>
+<p>sources_coords (arr): array consisting of [x_coord, y_coord] entries for the
+sources within the region</p>
+<p>customers_coords (arr): array consisting of [x_coord, y_coord] entries for
+the customers within the region</p>
+<p>country (str): optional string containing name of the considered country in
+english, used to obtain the country's centre and extremes (northmost,
+southmost, eastmost, westmost) for setting plot limits</p>
+<p>img_path (str): optional string containing the location of the image file
+which (if specified) will be used as a background for the generated plot, REQUIRES <code>country</code> to be specified as well</p>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><code>D (arr): array containing DataFrames representing distances between</code></dt>
+<dd>&nbsp;</dd>
+<dt><code>facilities</code></dt>
+<dd>&nbsp;</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def region_builder(sources_coords, customers_list, country=None, img_path=None):
+    &#34;&#34;&#34;
+    Build the region that is defined by the coordinates in ``sources_coords``
+    and ``customer_coords``. Eucledian distances are measured using kilometeres
+    as units.
+
+    Parameters
+    ----------
+    sources_coords (arr): array consisting of [x_coord, y_coord] entries for the
+    sources within the region
+
+    customers_coords (arr): array consisting of [x_coord, y_coord] entries for
+    the customers within the region
+
+    country (str): optional string containing name of the considered country in
+    english, used to obtain the country&#39;s centre and extremes (northmost,
+    southmost, eastmost, westmost) for setting plot limits
+
+    img_path (str): optional string containing the location of the image file
+    which (if specified) will be used as a background for the generated plot, REQUIRES ``country`` to be specified as well
+
+    Returns
+    -------
+    D (arr): array containing DataFrames representing distances between
+    facilities
+    &#34;&#34;&#34;
+
+    # build list for each facility type containing indices of all nodes
+    i_list, j_list, k_list, l_list, m_list = [], [], [], [], []
+    for idx in range(0, len(sources_coords)):
+        i_list.append(&#34;S_&#34; + str(idx))
+        j_list.append(&#34;OCF_&#34; + str(idx))
+        k_list.append(&#34;MPF_&#34; + str(idx))
+        l_list.append(&#34;CPF_&#34; + str(idx))
+        m_list.append(&#34;DPF_&#34; + str(idx))
+    # do the same for all nodes containing customers
+    n_list = []
+    for num in customers_list:
+        n_list.append(&#34;C_&#34; + str(num))
+
+    # create DataFrame containing sources and export it to csv file
+    sources = pd.DataFrame(sources_coords, columns=[&#34;xcord&#34;, &#34;ycord&#34;])
+    sources.to_csv(&#34;results/coordinates_sources.csv&#34;, float_format=&#34;%.3f&#34;)
+
+    # create DataFrame containing customers and export it to csv file
+    w, z = [], []
+    for i in customers_list:
+        w.append(sources.loc[i][&#34;xcord&#34;])
+        z.append(sources.loc[i][&#34;ycord&#34;])
+    w = np.array(w).reshape(-1, 1)
+    z = np.array(z).reshape(-1, 1)
+    customers = pd.DataFrame(
+        np.concatenate((w, z), axis=1), columns=[&#34;xcord&#34;, &#34;ycord&#34;], index=customers_list
+    )
+    customers.to_csv(&#34;results/coordinates_customers.csv&#34;, float_format=&#34;%.3f&#34;)
+
+    # obtain plot limits using geocoder if ``country`` is specified
+    if country != None:
+        # obtain corresponding lats and lngs using Nominatim geocoder
+        centre = gc.get_country_coords(country)
+        bounding_box = gc.get_country_coords(country, output_as=&#34;boundingbox&#34;)
+        # calculate x and y distances to the bottom left and top right corners
+        bottom_left = cc.coords_to_distances(
+            (bounding_box[0], bounding_box[2]), (centre[0], centre[1])
+        )
+        top_right = cc.coords_to_distances(
+            (bounding_box[1], bounding_box[3]), (centre[0], centre[1])
+        )
+        # extract the required extents for the plot
+        x_min = bottom_left[0]
+        x_max = top_right[0]
+        y_min = bottom_left[1]
+        y_max = top_right[1]
+    # otherwise, obtain plot limits based on plotted data
+    else:
+        x_vals = [sub_array[0] for sub_array in sources_coords]
+        y_vals = [sub_array[1] for sub_array in sources_coords]
+        length_x = max(x_vals) - min(x_vals)
+        length_y = max(y_vals) - min(y_vals)
+
+    # plot resulting region
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 8))
+    # plot sources in the region
+    sources.plot(ax=ax1, kind=&#34;scatter&#34;, x=&#34;xcord&#34;, y=&#34;ycord&#34;, color=&#34;k&#34;)
+    ax1.set_xlabel(&#34;Horizontal distance [km]&#34;)
+    ax1.set_ylabel(&#34;Vertical distance [km]&#34;)
+    ax1.set_title(&#34;Source locations&#34;)
+    for k, v in sources.iterrows():
+        ax1.annotate(
+            k, v, textcoords=&#34;offset points&#34;, xytext=(0, 10), ha=&#34;center&#34;, zorder=1
+        )
+    # plot customers in region
+    customers.plot(ax=ax2, kind=&#34;scatter&#34;, x=&#34;xcord&#34;, y=&#34;ycord&#34;, color=&#34;b&#34;)
+    ax2.set_xlabel(&#34;Horizontal distance [km]&#34;)
+    ax2.set_ylabel(&#34;Vertical distance [km]&#34;)
+    ax2.set_title(&#34;Customer locations&#34;)
+    for k, v in customers.iterrows():
+        ax2.annotate(
+            k, v, textcoords=&#34;offset points&#34;, xytext=(0, 10), ha=&#34;center&#34;, zorder=1
+        )
+    # set corresponding limits to both plots
+    if country != None:
+        ax1.set_xlim(x_min * 1.2, x_max * 1.2)
+        ax1.set_ylim(y_min * 1.2, y_max * 1.2)
+        ax2.set_xlim(ax1.get_xlim())
+        ax2.set_ylim(ax1.get_ylim())
+    else:
+        ax1.set_xlim(min(x_vals) - length_x * 0.2, max(x_vals) + length_x * 0.2)
+        ax1.set_ylim(min(y_vals) - length_y * 0.2, max(y_vals) + length_y * 0.2)
+        ax2.set_xlim(ax1.get_xlim())
+        ax2.set_ylim(ax1.get_ylim())
+    # set background image if ``img_path`` has been provided
+    if img_path != None and country != None:
+        background_img = plt.imread(img_path)
+        ax1.imshow(background_img, zorder=0, extent=[x_min, x_max, y_min, y_max])
+        ax2.imshow(background_img, zorder=0, extent=[x_min, x_max, y_min, y_max])
+    # save as vector graphics and show to user
+    fig.savefig(
+        &#34;results/sources_and_sinks.pdf&#34;,
+        dpi=1200,
+        bbox_inches=&#34;tight&#34;,
+        pad_inches=0.1,
+    )
+    plt.show()
+
+    # calculate Eucledian distances between all point pairs &amp; save to csv
+    D1 = pd.DataFrame(
+        sp.distance_matrix(sources.values, sources.values), index=i_list, columns=j_list
+    )
+    D1.to_csv(r&#34;results/D1.csv&#34;, float_format=&#34;%.3f&#34;)
+    D2 = pd.DataFrame(
+        sp.distance_matrix(sources.values, sources.values), index=j_list, columns=k_list
+    )
+    D2.to_csv(&#34;results/D2.csv&#34;, float_format=&#34;%.2f&#34;)
+    D3 = pd.DataFrame(
+        sp.distance_matrix(sources.values, sources.values), index=k_list, columns=l_list
+    )
+    D3.to_csv(&#34;results/D3.csv&#34;, float_format=&#34;%.2f&#34;)
+    D4 = pd.DataFrame(
+        sp.distance_matrix(sources.values, sources.values), index=l_list, columns=m_list
+    )
+    D4.to_csv(&#34;results/D4.csv&#34;, float_format=&#34;%.2f&#34;)
+    D5 = pd.DataFrame(
+        sp.distance_matrix(sources.values, customers.values),
+        index=m_list,
+        columns=n_list,
+    )
+    D5.to_csv(&#34;results/D5.csv&#34;, float_format=&#34;%.2f&#34;)
+
+    # return distance matrices in array format
+    D = [D1, D2, D3, D4, D5]
+    return D</code></pre>
+</details>
+</dd>
+<dt id="OptimisedWasteNetworksPy.src.network.region_generator"><code class="name flex">
+<span>def <span class="ident">region_generator</span></span>(<span>length, n, customers_list)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Generates fictional region represented by a square whose sides measure
+<code>length</code> with <code>n</code> equidistant nodes placed along them. Eucledian
+distances utilised throughout.</p>
+<h2 id="parameters">Parameters</h2>
+<p>length (float): length of a side of the square region [km]</p>
+<p>n (int): number of nodes along each side of the square region []</p>
+<p>customers_list (arr): array with node number corresponding to customers in
+the region</p>
+<h2 id="returns">Returns</h2>
+<dl>
+<dt><code>D (arr): array containing DataFrames representing distances between</code></dt>
+<dd>&nbsp;</dd>
+<dt><code>facilities</code></dt>
+<dd>&nbsp;</dd>
+</dl></div>
+<details class="source">
+<summary>
+<span>Expand source code</span>
+</summary>
+<pre><code class="python">def region_generator(length, n, customers_list):
+    &#34;&#34;&#34;
+    Generates fictional region represented by a square whose sides measure
+    ``length`` with ``n`` equidistant nodes placed along them. Eucledian
+    distances utilised throughout.
+
+    Parameters
+    ----------
+    length (float): length of a side of the square region [km]
+
+    n (int): number of nodes along each side of the square region []
+
+    customers_list (arr): array with node number corresponding to customers in
+    the region
+
+    Returns
+    -------
+    D (arr): array containing DataFrames representing distances between
+    facilities
+    &#34;&#34;&#34;
+
+    # build x and y vectors representing nodes in the region
+    x = np.linspace(0, length, n)
+    y = np.linspace(0, length, n)
+    x_vector, y_vector = np.meshgrid(x, y)
+
+    # convert vectors into coordinates and store in array ``points``
+    points = []
+    for i in range(n):
+        for j in range(n):
+            points.append([x_vector[i, j], y_vector[i, j]])
+    # build list for each facility type containing indices of all nodes
+    i_list, j_list, k_list, l_list, m_list = [], [], [], [], []
+    for idx in range(0, n * n):
+        i_list.append(&#34;S_&#34; + str(idx))
+        j_list.append(&#34;OCF_&#34; + str(idx))
+        k_list.append(&#34;MPF_&#34; + str(idx))
+        l_list.append(&#34;CPF_&#34; + str(idx))
+        m_list.append(&#34;DPF_&#34; + str(idx))
+    # do the same for all nodes containing customers
+    n_list = []
+    for num in customers_list:
+        n_list.append(&#34;C_&#34; + str(num))
+
+    # create DataFrame containing sources and export it to csv file
+    sources = pd.DataFrame(points, columns=[&#34;xcord&#34;, &#34;ycord&#34;])
+    sources.to_csv(&#34;results/coordinates_sources.csv&#34;, float_format=&#34;%.3f&#34;)
+
+    # create DataFrame containing customers and export it to csv file
+    w, z = [], []
+    for i in customers_list:
+        w.append(sources.loc[i][&#34;xcord&#34;])
+        z.append(sources.loc[i][&#34;ycord&#34;])
+    w = np.array(w).reshape(-1, 1)
+    z = np.array(z).reshape(-1, 1)
+    customers = pd.DataFrame(
+        np.concatenate((w, z), axis=1), columns=[&#34;xcord&#34;, &#34;ycord&#34;], index=customers_list
+    )
+    customers.to_csv(&#34;results/coordinates_customers.csv&#34;, float_format=&#34;%.3f&#34;)
+
+    # plot resulting fictional region
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 8))
+    # plot sources in the fictional region
+    sources.plot(ax=ax1, kind=&#34;scatter&#34;, x=&#34;xcord&#34;, y=&#34;ycord&#34;, color=&#34;k&#34;)
+    ax1.set_xlabel(&#34;Horizontal distance [km]&#34;)
+    ax1.set_ylabel(&#34;Vertical distance [km]&#34;)
+    ax1.set_xlim(-length * 0.3, length * 1.3)
+    ax1.set_ylim(-length * 0.3, length * 1.3)
+    ax1.set_title(&#34;Source locations&#34;)
+    for k, v in sources.iterrows():
+        ax1.annotate(k, v, textcoords=&#34;offset points&#34;, xytext=(0, 10), ha=&#34;center&#34;)
+    # plot customers in fictional region
+    customers.plot(ax=ax2, kind=&#34;scatter&#34;, x=&#34;xcord&#34;, y=&#34;ycord&#34;, color=&#34;b&#34;)
+    ax2.set_xlabel(&#34;Horizontal distance [km]&#34;)
+    ax2.set_ylabel(&#34;Vertical distance [km]&#34;)
+    ax2.set_xlim(-length * 0.3, length * 1.3)
+    ax2.set_ylim(-length * 0.3, length * 1.3)
+    ax2.set_title(&#34;Customer locations&#34;)
+    for k, v in customers.iterrows():
+        ax2.annotate(k, v, textcoords=&#34;offset points&#34;, xytext=(0, 10), ha=&#34;center&#34;)
+    # save as vector graphics and show to user
+    fig.savefig(
+        &#34;results/sources_and_sinks.pdf&#34;,
+        dpi=1200,
+        bbox_inches=&#34;tight&#34;,
+        pad_inches=0.1,
+    )
+    plt.show()
+
+    # calculate Eucledian distances between all point pairs &amp; save to csv
+    D1 = pd.DataFrame(
+        sp.distance_matrix(sources.values, sources.values), index=i_list, columns=j_list
+    )
+    D1.to_csv(r&#34;results/D1.csv&#34;, float_format=&#34;%.3f&#34;)
+    D2 = pd.DataFrame(
+        sp.distance_matrix(sources.values, sources.values), index=j_list, columns=k_list
+    )
+    D2.to_csv(&#34;results/D2.csv&#34;, float_format=&#34;%.2f&#34;)
+    D3 = pd.DataFrame(
+        sp.distance_matrix(sources.values, sources.values), index=k_list, columns=l_list
+    )
+    D3.to_csv(&#34;results/D3.csv&#34;, float_format=&#34;%.2f&#34;)
+    D4 = pd.DataFrame(
+        sp.distance_matrix(sources.values, sources.values), index=l_list, columns=m_list
+    )
+    D4.to_csv(&#34;results/D4.csv&#34;, float_format=&#34;%.2f&#34;)
+    D5 = pd.DataFrame(
+        sp.distance_matrix(sources.values, customers.values),
+        index=m_list,
+        columns=n_list,
+    )
+    D5.to_csv(&#34;results/D5.csv&#34;, float_format=&#34;%.2f&#34;)
+
+    # return distance matrices in array format
+    D = [D1, D2, D3, D4, D5]
+    return D</code></pre>
+</details>
+</dd>
+</dl>
+</section>
+<section>
+</section>
+</article>
+<nav id="sidebar">
+<h1>Index</h1>
+<div class="toc">
+<ul></ul>
+</div>
+<ul id="index">
+<li><h3>Super-module</h3>
+<ul>
+<li><code><a title="OptimisedWasteNetworksPy.src" href="index.html">OptimisedWasteNetworksPy.src</a></code></li>
+</ul>
+</li>
+<li><h3><a href="#header-functions">Functions</a></h3>
+<ul class="">
+<li><code><a title="OptimisedWasteNetworksPy.src.network.region_builder" href="#OptimisedWasteNetworksPy.src.network.region_builder">region_builder</a></code></li>
+<li><code><a title="OptimisedWasteNetworksPy.src.network.region_generator" href="#OptimisedWasteNetworksPy.src.network.region_generator">region_generator</a></code></li>
+</ul>
+</li>
+</ul>
+</nav>
+</main>
+<footer id="footer">
+<p>Generated by <a href="https://pdoc3.github.io/pdoc" title="pdoc: Python API documentation generator"><cite>pdoc</cite> 0.10.0</a>.</p>
+</footer>
+</body>
+</html>
