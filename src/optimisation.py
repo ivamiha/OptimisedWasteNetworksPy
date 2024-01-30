@@ -1480,6 +1480,8 @@ class Infrastructure:
 
         # clear the figure
         plt.clf()
+        # configure figure fonts
+        plt.rcParams["font.size"] = 16
 
         # define economic subcategories and their values
         ETICS = (self.transportation_cost_1, 0, 0)
@@ -1541,11 +1543,11 @@ class Infrastructure:
         ax.legend(
             (b1[0], b2[0], b3[0], b4[0], b5[0]),
             (
-                "ETICS",
-                "compressed ETICS or OCF",
-                "pre-concentrate or MPF",
-                "pyrolysis oil or CPF",
-                "styrene or DPF",
+                "ET",
+                "CE or OCF",
+                "PC or MPF",
+                "PO or CPF",
+                "SY or DPF",
             ),
             loc="upper left",
         )
@@ -1624,11 +1626,11 @@ class Infrastructure:
         ax.legend(
             (b1[0], b2[0], b3[0], b4[0], b5[0]),
             (
-                "ETICS",
-                "compressed ETICS or OCF",
-                "pre-concentrate or MPF",
-                "pyrolysis oil or CPF",
-                "styrene or DPF",
+                "ET",
+                "CE or OCF",
+                "PC or MPF",
+                "PO or CPF",
+                "SY or DPF",
             ),
             loc="upper left",
         )
