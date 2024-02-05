@@ -15,8 +15,13 @@ def get_city_coords(city):
     """
 
     # create url
+    # url = "{0}{1}{2}".format(
+    #    "http://nominatim.openstreetmap.org/search?city=",
+    #    city,
+    #    "&format=json&polygon=0",
+    # )
     url = "{0}{1}{2}".format(
-        "http://nominatim.openstreetmap.org/search?city=",
+        "http://nominatim.openstreetmap.org/search?q=",
         city,
         "&format=json&polygon=0",
     )
