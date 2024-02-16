@@ -64,10 +64,17 @@ class Infrastructure:
     # define environmental impact variables
     env_rolloff = 5.6402e-4  # environmental impact of roll-off [tons CO2e/km]
     env_tanker = 1.0586e-4  # environmental impact of tanker [tons CO2e/km]
-    CI_OCF = 2.808e-5  # construction impact of mech. plant [tons CO2e/ton]
-    CI_MPF = 4.303e-3  # construction impact of mech. plant [tons CO2e/ton]
-    CI_CPF = 0.816  # construction impact of chem. plant [tons CO2e/ton]
-    CI_DPF = 0.218  # construction impact of chem. plant [tons CO2e/ton]
+    ref_CI_OCF = 2.8083e5  # OCF constr. impact @ ref capacity [tons CO2e/ton]
+    ref_CI_MPF = 2.8083e5  # OCF constr. impact @ ref capacity [tons CO2e/ton]
+    # ref_CI_MPF = 2.1516e6  # MPF constr. impact @ ref capacity [tons CO2e/ton]
+    ref_CI_CPF = 8.2753e-3  # CPF constr. impact @ ref capacity [tons CO2e/ton]
+    ref_CI_DPF = 8.2753e-3  # DPF constr. impact @ ref capacity [tons CO2e/ton]
+    ref_capacity_CI_OCF = 200000 / working_days  # OCF CI ref. cap. [tons/day]
+    ref_capacity_CI_MPF = 200000 / working_days  # OCF CI ref. cap. [tons/day]
+    # ref_capacity_CI_MPF = 10000 / working_days  # MPF CI ref. cap. [tons/day]
+    ref_capacity_CI_CPF = 0.004 / working_days  # CPF CI ref. cap. [tons/day]
+    ref_capacity_CI_DPF = 0.004 / working_days  # DPF CI ref. cap. [tons/day]
+    construction_lifetime = 50  # lifetime of constr. infrastructure [years]
     OI_OCF = 1.250e-2  # operational impact of OCF [tons CO2e/ton]
     OI_MPF = 3.575e-2  # operational impact of MPF [tons CO2e/ton]
     OI_CPF = 0.524  # operational impact of CPF [tons CO2e/ton]
@@ -293,6 +300,21 @@ class Infrastructure:
         # pyrolysis oil and styrene transported in tanker
         self.TI_pyrolysis_oil = self.env_tanker
         self.TI_styrene = self.env_tanker
+
+        # calculate construction environmental impact
+        # scale CI linearly w.r.t. reference capacity & compute daily CI
+        self.CI_OCF = (
+            self.ref_CI_OCF * (self.facility_cap["OCF"] / self.ref_capacity_CI_OCF)
+        ) / (self.construction_lifetime * self.working_days)
+        self.CI_MPF = (
+            self.ref_CI_MPF * (self.facility_cap["MPF"] / self.ref_capacity_CI_MPF)
+        ) / (self.construction_lifetime * self.working_days)
+        self.CI_CPF = (
+            self.ref_CI_CPF * (self.facility_cap["CPF"] / self.ref_capacity_CI_CPF)
+        ) / (self.construction_lifetime * self.working_days)
+        self.CI_DPF = (
+            self.ref_CI_DPF * (self.facility_cap["DPF"] / self.ref_capacity_CI_DPF)
+        ) / (self.construction_lifetime * self.working_days)
 
     def model_value_chain(self, weight_economic, weight_environmental):
         """
@@ -554,23 +576,27 @@ class Infrastructure:
             -1
             * self.env_cost
             * (
-                gp.quicksum(
-                    (self.CI_OCF + self.OI_OCF)
+                gp.quicksum(self.CI_OCF * b[j] for j in self.OCF)
+                + gp.quicksum(self.CI_MPF * b[k] for k in self.MPF)
+                + gp.quicksum(self.CI_CPF * b[l] for l in self.CPF)
+                + gp.quicksum(self.CI_DPF * b[m] for m in self.DPF)
+                + gp.quicksum(
+                    self.OI_OCF
                     * gp.quicksum(x[p, i, j] for i in self.S for p in self.P)
                     for j in self.OCF
                 )
                 + gp.quicksum(
-                    (self.CI_MPF + self.OI_MPF)
+                    self.OI_MPF
                     * gp.quicksum(x[p, j, k] for j in self.OCF for p in self.P)
                     for k in self.MPF
                 )
                 + gp.quicksum(
-                    (self.CI_CPF + self.OI_CPF)
+                    self.OI_CPF
                     * gp.quicksum(x[p, k, l] for k in self.MPF for p in self.P)
                     for l in self.CPF
                 )
                 + gp.quicksum(
-                    (self.CI_DPF + self.OI_DPF)
+                    self.OI_DPF
                     * gp.quicksum(x[p, l, m] for l in self.CPF for p in self.P)
                     for m in self.DPF
                 )
@@ -818,7 +844,7 @@ class Infrastructure:
         self.capex_MPF = sum(self.ACI_MPF * vars[f"b({k})"] for k in self.MPF)
         self.capex_CPF = sum(self.ACI_CPF * vars[f"b({l})"] for l in self.CPF)
         self.capex_DPF = sum(self.ACI_DPF * vars[f"b({m})"] for m in self.DPF)
-        # OPEX of facilities int he value chain
+        # OPEX of facilities in the value chain
         self.opex_OCF = sum(
             (
                 self.fOPEX_OCF * vars[f"b({j})"]
@@ -900,20 +926,16 @@ class Infrastructure:
         )
         # construction impact
         self.construction_impact_OCF = sum(
-            self.CI_OCF * sum(vars[f"x({p},{i},{j})"] for i in self.S for p in self.P)
-            for j in self.OCF
+            self.CI_OCF * vars[f"b({j})"] for j in self.OCF
         )
         self.construction_impact_MPF = sum(
-            self.CI_MPF * sum(vars[f"x({p},{j},{k})"] for j in self.OCF for p in self.P)
-            for k in self.MPF
+            self.CI_MPF * vars[f"b({k})"] for k in self.MPF
         )
         self.construction_impact_CPF = sum(
-            self.CI_CPF * sum(vars[f"x({p},{k},{l})"] for k in self.MPF for p in self.P)
-            for l in self.CPF
+            self.CI_CPF * vars[f"b({l})"] for l in self.CPF
         )
         self.construction_impact_DPF = sum(
-            self.CI_DPF * sum(vars[f"x({p},{l},{m})"] for l in self.CPF for p in self.P)
-            for m in self.DPF
+            self.CI_DPF * vars[f"b({m})"] for m in self.DPF
         )
         # operational impact
         self.operational_impact_OCF = sum(
