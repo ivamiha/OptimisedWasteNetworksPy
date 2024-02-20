@@ -17,7 +17,7 @@ except FileExistsError:
     pass
 
 # read region csv file containing sources
-region = pd.read_csv("data/DE_NUTS1.csv")
+region = pd.read_csv("data/DE_NUTS2.csv")
 # define country to which the region corresponds
 country = "Germany"
 
@@ -134,7 +134,7 @@ facility_capacity = {
 
 # initiate ``Infrastructure`` class based on distances from building network
 scenario = optimisation.Infrastructure(
-    distances[0], distances[1], distances[2], distances[3], distances[4]
+    distances[0], distances[1], distances[2], distances[3], distances[4], distances[5]
 )
 
 # define the value chain

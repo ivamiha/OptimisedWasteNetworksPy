@@ -118,9 +118,13 @@ def region_generator(length, n, customers_list):
         columns=n_list,
     )
     D5.to_csv("results/D5.csv", float_format="%.2f")
+    D6 = pd.DataFrame(
+        sp.distance_matrix(sources.values, sources.values), index=i_list, columns=k_list
+    )
+    D6.to_csv("results/D6.csv", float_format="%.2f")
 
     # return distance matrices in array format
-    D = [D1, D2, D3, D4, D5]
+    D = [D1, D2, D3, D4, D5, D6]
     return D
 
 
@@ -272,7 +276,11 @@ def region_builder(sources_coords, customers_list, country=None, img_path=None):
         columns=n_list,
     )
     D5.to_csv("results/D5.csv", float_format="%.2f")
+    D6 = pd.DataFrame(
+        sp.distance_matrix(sources.values, sources.values), index=i_list, columns=k_list
+    )
+    D6.to_csv("results/D6.csv", float_format="%.2f")
 
     # return distance matrices in array format
-    D = [D1, D2, D3, D4, D5]
+    D = [D1, D2, D3, D4, D5, D6]
     return D

@@ -15,13 +15,13 @@ except FileExistsError:
     pass
 
 # number of sources per side of region
-n = 4
+n = 3
 
 # define nodes on which customers are located
 customers = [0, 1, 2, 3]
 
 # generate region defined by distances between sources & sinks
-distances = network.region_generator(1000, n, customers)
+distances = network.region_generator(10, n, customers)
 
 # specify product set for the value chain
 products = [
@@ -89,7 +89,7 @@ facility_capacity = {"OCF": 0.4, "MPF": 41, "CPF": 12, "DPF": 30}
 
 # initiate ``Infrastructure`` class based on distances from building network
 scenario = optimisation.Infrastructure(
-    distances[0], distances[1], distances[2], distances[3], distances[4]
+    distances[0], distances[1], distances[2], distances[3], distances[4], distances[5]
 )
 
 # define the value chain

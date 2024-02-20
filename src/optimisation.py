@@ -16,7 +16,7 @@ import sys
 class Infrastructure:
     """
     ``Infrastructure class`` defines value-chain-specific parameters and builds
-    up the optimisation problem utilising pyscipopt
+    up the optimisation problem utilising gurobipy
     """
 
     # define miscellaneous simulation variables
@@ -80,7 +80,7 @@ class Infrastructure:
     OI_CPF = 0.524  # operational impact of CPF [tons CO2e/ton]
     OI_DPF = 1.156  # operational impact of DPF [tons CO2e/ton]
 
-    def __init__(self, D1, D2, D3, D4, D5):
+    def __init__(self, D1, D2, D3, D4, D5, D6):
         """
         Initialise ``Infrastructure`` object utilising DataFrames for the
         distance between facilities in the network.
@@ -96,6 +96,8 @@ class Infrastructure:
         D4 (DataFrame): distance matrix for CPF to DPF
 
         D5 (DataFrame): distance matrix for DPF to C
+
+        D6 (DataFrame): distance matrix for S to MPF (no optional compacting)
 
         Notes
         -----
@@ -113,6 +115,7 @@ class Infrastructure:
         self.D3 = D3 * self.circuit_factor
         self.D4 = D4 * self.circuit_factor
         self.D5 = D5 * self.circuit_factor
+        self.D6 = D6 * self.circuit_factor
         # initialise instance variables for sources, customers & facilities
         self.S = D1.index.tolist()
         self.OCF = D1.columns.tolist()
@@ -260,7 +263,10 @@ class Infrastructure:
             / self.working_days
         )
 
-        # calculate transportation costs [euro/(km*ton)]
+        # calculate transportation costs [euro/(km*ton)] NOTE: the calculation
+        # implicitely assumes that all trips are completed at a maximum load;
+        # the assumption can be tackled by employing a scaling factor in the
+        # economic objective function
         # ETICS transported in roll-off, determine if volume- or load-limit
         self.TC_ETICS = (
             (self.fuel_price * self.fuel_cons + self.toll_cost)
@@ -360,6 +366,13 @@ class Infrastructure:
                     x[p, j, k] = model.addVar(
                         vtype="CONTINUOUS", lb=0, name="x(%s,%s,%s)" % (p, j, k)
                     )
+        # product flows from S to MPF (no optional compacting route)
+        for p in self.P:
+            for i in self.S:
+                for k in self.MPF:
+                    x[p, i, k] = model.addVar(
+                        vtype="CONTINUOUS", lb=0, name="x(%s,%s,%s)" % (p, i, k)
+                    )
         # product flows from MPF to CPF
         for p in self.P:
             for k in self.MPF:
@@ -381,16 +394,16 @@ class Infrastructure:
                     x[p, m, n] = model.addVar(
                         vtype="CONTINUOUS", lb=0, name="x(%s,%s,%s)" % (p, m, n)
                     )
-        # OCF installation binary outcomes
+        # OCF installation integer outcomes
         for j in self.OCF:
             b[j] = model.addVar(vtype="INTEGER", lb=0, name="b(%s)" % j)
-        # MPF installation binary outcomes
+        # MPF installation integer outcomes
         for k in self.MPF:
             b[k] = model.addVar(vtype="INTEGER", lb=0, name="b(%s)" % k)
-        # CPF installation binary outcomes
+        # CPF installation integer outcomes
         for l in self.CPF:
             b[l] = model.addVar(vtype="INTEGER", lb=0, name="b(%s)" % l)
-        # DPF installation binary outcomes
+        # DPF installation integer outcomes
         for m in self.DPF:
             b[m] = model.addVar(vtype="INTEGER", lb=0, name="b(%s)" % m)
 
@@ -398,7 +411,10 @@ class Infrastructure:
         for p in self.P:
             for i in self.S:
                 model.addConstr(
-                    gp.quicksum(x[p, i, j] for j in self.OCF)
+                    (
+                        gp.quicksum(x[p, i, j] for j in self.OCF)
+                        + gp.quicksum(x[p, i, k] for k in self.MPF)
+                    )
                     == self.source_cap.loc[i, p],
                     name="Conservation(%s,%s)" % (p, i),
                 )
@@ -414,10 +430,13 @@ class Infrastructure:
                     name="Conservation(%s,%s)" % (p, j),
                 )
             for k in self.MPF:
-                # input compressed ETICS, output pre-concentrate
+                # input compressed ETICS and ETICS, output pre-concentrate
                 model.addConstr(
                     self.yield_factor[(p, "MPF")]
-                    * gp.quicksum(x[p, j, k] for j in self.OCF for p in self.PP)
+                    * (
+                        gp.quicksum(x[p, j, k] for j in self.OCF for p in self.PP)
+                        + gp.quicksum(x[p, i, k] for i in self.S for p in self.PP)
+                    )
                     == gp.quicksum(x[p, k, l] for l in self.CPF),
                     name="Conservation(%s,%s)" % (p, k),
                 )
@@ -447,7 +466,10 @@ class Infrastructure:
             )
         for k in self.MPF:
             model.addConstr(
-                gp.quicksum(x[p, j, k] for j in self.OCF for p in self.P)
+                (
+                    gp.quicksum(x[p, j, k] for j in self.OCF for p in self.P)
+                    + gp.quicksum(x[p, i, k] for i in self.S for p in self.P)
+                )
                 <= b[k] * self.facility_cap["MPF"],
                 name="Capacity(%s)" % k,
             )
@@ -547,6 +569,12 @@ class Infrastructure:
                     for p in self.P
                 )
                 + gp.quicksum(
+                    2 * self.D6.loc[i, k] * self.TC_ETICS * x[p, i, k]
+                    for i in self.S
+                    for k in self.MPF
+                    for p in self.P
+                )
+                + gp.quicksum(
                     2 * self.D3.loc[k, l] * self.TC_pre_concentrate * x[p, k, l]
                     for k in self.MPF
                     for l in self.CPF
@@ -609,6 +637,12 @@ class Infrastructure:
                 + gp.quicksum(
                     2 * self.D2.loc[j, k] * self.TI_comp_ETICS * x[p, j, k]
                     for j in self.OCF
+                    for k in self.MPF
+                    for p in self.P
+                )
+                + gp.quicksum(
+                    2 * self.D6.loc[i, k] * self.TI_ETICS * x[p, i, k]
+                    for i in self.S
                     for k in self.MPF
                     for p in self.P
                 )
@@ -717,6 +751,18 @@ class Infrastructure:
                         self.product_flow = self.product_flow._append(
                             new_data, ignore_index=True
                         )
+                for i in self.S:
+                    if vars[f"x({p},{i},{k})"] > 0.001:
+                        # append flow data from i to k to DataFrame
+                        new_data = {
+                            "Origin": i,
+                            "Destination": k,
+                            "Product": p,
+                            "Amount": vars[f"x({p},{i},{k})"],
+                        }
+                        self.product_flow = self.product_flow._append(
+                            new_data, ignore_index=True
+                        )
         self.name_list_MPF = name_list_MPF
 
         # process data related to installed CPFs
@@ -803,6 +849,15 @@ class Infrastructure:
             for i in self.S
             for j in self.OCF
         )
+        # transportation cost between S and MPF
+        self.transportation_cost_1 += sum(
+            2
+            * self.D6.loc[i, k]
+            * self.TC_ETICS
+            * sum(vars[f"x({p},{i},{k})"] for p in self.P)
+            for i in self.S
+            for k in self.MPF
+        )
         # transportation costs between OCF and MPF
         self.transportation_cost_2 = sum(
             2
@@ -887,6 +942,15 @@ class Infrastructure:
             * sum(vars[f"x({p},{i},{j})"] for p in self.P)
             for i in self.S
             for j in self.OCF
+        )
+        # transportation impact between S and MPF
+        self.transportation_impact_1 += sum(
+            2
+            * self.D6.loc[i, k]
+            * self.TI_ETICS
+            * sum(vars[f"x({p},{i},{k})"] for p in self.P)
+            for i in self.S
+            for k in self.MPF
         )
         # transportation impact between OCF and MPF
         self.transportation_impact_2 = sum(
